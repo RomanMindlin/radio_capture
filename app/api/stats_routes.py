@@ -1,5 +1,6 @@
 import csv
 import io
+import logging
 import os
 from datetime import datetime
 from typing import List, Optional
@@ -13,6 +14,7 @@ from app.core.db import get_session
 from app.models.models import Recording, Stream, User, UserRole
 from app.services.stats import get_detailed_stats
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.get("/summary")
@@ -228,5 +230,87 @@ async def classify_file(
         raise HTTPException(
             status_code=500,
             detail=f"Classification failed: {str(e)}"
+        )
+
+@router.post("/files/{file_id}/asr")
+async def transcribe_file(
+    file_id: int,
+    model: str = "tiny",
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Transcribe audio file using Whisper ASR.
+    Returns transcription with timestamps and metadata.
+    """
+    import time
+    from app.services.asr import transcribe
+    
+    # Get recording from database
+    recording = session.get(Recording, file_id)
+    if not recording:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    
+    # Check if file exists on disk
+    if not os.path.exists(recording.path):
+        raise HTTPException(
+            status_code=404,
+            detail="File not found on disk"
+        )
+    
+    # Check cache: if already transcribed with same model, return cached result
+    model_id = f"whisper-{model}"
+    if recording.asr_ts and recording.asr_model == model_id:
+        logger.info(f"Returning cached transcription for recording {file_id}")
+        return {
+            "recording_id": recording.id,
+            "transcript": recording.transcript,
+            "segments": recording.transcript_json.get("segments", []) if recording.transcript_json else [],
+            "model": recording.asr_model,
+            "confidence": recording.asr_confidence or 0.0,
+            "processing_seconds": 0.0,  # Cached result
+            "cached": True
+        }
+    
+    # Run transcription
+    start_time = time.time()
+    try:
+        logger.info(f"Starting ASR for recording {file_id} with model {model}")
+        result = transcribe(recording.path, model=model)
+        processing_time = time.time() - start_time
+        
+        # Update database with results
+        recording.transcript = result["transcript"]
+        recording.transcript_json = {
+            "segments": result["segments"]
+        }
+        recording.asr_model = result["model"]
+        recording.asr_confidence = result["confidence"]
+        recording.asr_ts = datetime.utcnow()
+        
+        session.add(recording)
+        session.commit()
+        session.refresh(recording)
+        
+        logger.info(f"ASR completed for recording {file_id} in {processing_time:.2f}s")
+        
+        # Return response
+        return {
+            "recording_id": recording.id,
+            "transcript": result["transcript"],
+            "segments": result["segments"],
+            "model": result["model"],
+            "confidence": result["confidence"],
+            "processing_seconds": round(processing_time, 2),
+            "cached": False
+        }
+        
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"ASR failed for recording {file_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"ASR failed: {str(e)}"
         )
 

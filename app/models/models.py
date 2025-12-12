@@ -48,6 +48,13 @@ class Recording(SQLModel, table=True):
     duration_seconds: float = Field(default=0.0)
     status: str = Field(default="recording") # recording, completed, error
     classification: Optional[str] = Field(default=None) # speech, music, ad
+    
+    # ASR fields
+    transcript: Optional[str] = Field(default=None)
+    transcript_json: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    asr_model: Optional[str] = Field(default=None)
+    asr_confidence: Optional[float] = Field(default=None)
+    asr_ts: Optional[datetime] = None
 
     stream: Optional[Stream] = Relationship(back_populates="recordings")
 
