@@ -12,3 +12,9 @@ aiofiles
 pydantic-settings
 psutil
 requests
+# Audio classification dependencies
+torch==2.0.0
+panns-inference==0.1.1
+librosa==0.10.1
+numpy==1.23.5
+soundfile==0.12.1

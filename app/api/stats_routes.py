@@ -68,7 +68,8 @@ async def list_files(
             "end_ts": r.end_ts.isoformat() if r.end_ts else None,
             "size_bytes": r.size_bytes,
             "duration_seconds": r.duration_seconds,
-            "status": r.status
+            "status": r.status,
+            "classification": r.classification
         })
     
     return response_data
@@ -175,3 +176,57 @@ async def stream_file(
     media_type = media_type_map.get(file_ext, 'audio/mpeg')
     
     return FileResponse(recording.path, media_type=media_type)
+
+@router.post("/files/{file_id}/classify")
+async def classify_file(
+    file_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Classify audio file as speech, music, or ad using PANNs CNN14 model.
+    """
+    from app.services.audio_classifier import classify_audio
+    
+    # Get recording from database
+    recording = session.get(Recording, file_id)
+    if not recording:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    
+    # Check if file exists on disk
+    if not os.path.exists(recording.path):
+        raise HTTPException(
+            status_code=404, 
+            detail="File descriptor exists but file missing on disk"
+        )
+    
+    try:
+        # Run classification
+        classification = classify_audio(recording.path)
+        
+        # Update database
+        recording.classification = classification
+        session.add(recording)
+        session.commit()
+        session.refresh(recording)
+        
+        # Return updated metadata
+        return {
+            "id": recording.id,
+            "path": recording.path,
+            "classification": recording.classification,
+            "stream_id": recording.stream_id,
+            "start_ts": recording.start_ts.isoformat(),
+            "status": recording.status,
+            "message": f"Successfully classified as '{classification}'"
+        }
+        
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        # Don't overwrite existing classification on error
+        raise HTTPException(
+            status_code=500,
+            detail=f"Classification failed: {str(e)}"
+        )
+

@@ -47,6 +47,7 @@ class Recording(SQLModel, table=True):
     size_bytes: int = Field(default=0)
     duration_seconds: float = Field(default=0.0)
     status: str = Field(default="recording") # recording, completed, error
+    classification: Optional[str] = Field(default=None) # speech, music, ad
 
     stream: Optional[Stream] = Relationship(back_populates="recordings")
 

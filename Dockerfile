@@ -2,10 +2,11 @@ FROM python:3.11-slim
 
 # Install system dependencies
 # ffmpeg is required for audio capture
-# curl/wget for healthchecks if needed
+# curl/wget for healthchecks and model downloads
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
