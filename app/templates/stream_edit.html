@@ -1,0 +1,96 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">{% if stream %}Edit {{ stream.name }}{% else %}New Stream{% endif %}</h1>
+</div>
+
+<form id="stream-form">
+    <div class="mb-3">
+        <label for="name" class="form-label">Name</label>
+        <input type="text" class="form-control" id="name" name="name" value="{{ stream.name if stream else '' }}"
+            required>
+    </div>
+    <div class="mb-3">
+        <label for="url" class="form-label">Stream URL</label>
+        <input type="text" class="form-control" id="url" name="url" value="{{ stream.url if stream else '' }}" required>
+    </div>
+
+    <div class="mb-3 form-check">
+        <input type="checkbox" class="form-check-input" id="enabled" name="enabled" {% if stream and stream.enabled
+            %}checked{% endif %}>
+        <label class="form-check-label" for="enabled">Enabled</label>
+    </div>
+
+    <h4>Mandatory Parameters</h4>
+    <div class="mb-3">
+        <label for="format" class="form-label">Format</label>
+        <select class="form-select" id="format">
+            {% set fmt = stream.mandatory_params.get('format', 'wav') if stream else 'wav' %}
+            <option value="mp3" {% if fmt=='mp3' %}selected{% endif %}>MP3</option>
+            <option value="wav" {% if fmt=='wav' %}selected{% endif %}>WAV</option>
+            <option value="aac" {% if fmt=='aac' %}selected{% endif %}>AAC</option>
+        </select>
+    </div>
+    <div class="mb-3">
+        <label for="segment_time" class="form-label">Segment Time (seconds)</label>
+        <input type="number" class="form-control" id="segment_time"
+            value="{{ stream.mandatory_params.get('segment_time', 3600) if stream else 3600 }}">
+    </div>
+    <div class="mb-3">
+        <label for="channels" class="form-label">Channels</label>
+        <input type="number" class="form-control" id="channels"
+            value="{{ stream.mandatory_params.get('channels', 1) if stream else 1 }}">
+    </div>
+    <div class="mb-3">
+        <label for="sample_rate" class="form-label">Sample Rate (Hz)</label>
+        <input type="number" class="form-control" id="sample_rate"
+            value="{{ stream.mandatory_params.get('sample_rate', 16000) if stream else 16000 }}">
+    </div>
+
+    <h4>Optional Parameters (JSON)</h4>
+    <div class="mb-3">
+        <textarea class="form-control" id="optional_params"
+            rows="3">{{ stream.optional_params | tojson if stream else '{}' }}</textarea>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save</button>
+</form>
+
+<script>
+    document.getElementById('stream-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const isNew = {{ 'true' if not stream else 'false' }};
+
+    const streamId = {{ stream.id if stream else 'null' }};
+
+    const data = {
+        name: document.getElementById('name').value,
+        url: document.getElementById('url').value,
+        enabled: document.getElementById('enabled').checked,
+        mandatory_params: {
+            format: document.getElementById('format').value,
+            segment_time: parseInt(document.getElementById('segment_time').value),
+            channels: parseInt(document.getElementById('channels').value),
+            sample_rate: parseInt(document.getElementById('sample_rate').value)
+        },
+        optional_params: JSON.parse(document.getElementById('optional_params').value || '{}')
+    };
+
+    const url = isNew ? '/api/streams/' : '/api/streams/' + streamId;
+    const method = isNew ? 'POST' : 'PUT';
+
+    const resp = await fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+
+    if (resp.ok) {
+        window.location.href = '/streams';
+    } else {
+        alert('Error saving stream');
+    }
+    });
+</script>
+{% endblock %}

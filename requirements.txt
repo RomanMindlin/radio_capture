@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+sqlmodel
+alembic
+passlib[bcrypt]
+bcrypt==4.0.1
+python-jose[cryptography]
+python-multipart
+jinja2
+httpx
+aiofiles
+pydantic-settings
+psutil
+requests

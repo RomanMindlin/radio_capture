@@ -1,0 +1,133 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Dashboard</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle">
+            <span data-feather="calendar"></span>
+            Last 30 Days Stats
+        </button>
+    </div>
+</div>
+
+<div class="row">
+    {% for stream in streams %}
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">{{ stream.name }}</h5>
+                <p class="card-text">
+                    Status: <span class="status-indicator status-{{ stream.current_status }}"></span> {{
+                    stream.current_status }} <br>
+                    Last Up: {{ stream.last_up }}
+                </p>
+                <a href="/streams/{{ stream.id }}" class="btn btn-sm btn-outline-primary">Details</a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<h2 class="mt-4">Stream Statistics</h2>
+<div id="stats-container" class="row">
+    <div class="col-12 text-center">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        loadStats();
+    });
+
+    async function loadStats() {
+        const response = await fetch('/api/stats/summary?days=30');
+        const data = await response.json();
+        const container = document.getElementById('stats-container');
+        container.innerHTML = '';
+
+        for (const [streamId, stats] of Object.entries(data)) {
+            const card = document.createElement('div');
+            card.className = 'col-md-6 mb-4';
+
+            // Status logic can be reused or simplified since we have the main cards above. 
+            // Required: "hours за день/неделю/месяц, объём данных за день/неделю, число ошибок ... график активности"
+
+            card.innerHTML = `
+                <div class="card h-100">
+                    <div class="card-header">
+                        <strong>${stats.name}</strong> Stats
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3 text-center">
+                            <div class="col-4">
+                                <h6>Today</h6>
+                                <small>${(stats.today.duration / 3600).toFixed(1)}h / ${(stats.today.size / 1024 / 1024).toFixed(1)}MB</small>
+                            </div>
+                            <div class="col-4">
+                                <h6>Week</h6>
+                                <small>${(stats.week.duration / 3600).toFixed(1)}h / ${(stats.week.size / 1024 / 1024).toFixed(0)}MB</small>
+                            </div>
+                             <div class="col-4">
+                                <h6>Month</h6>
+                                <small>${(stats.month.duration / 3600).toFixed(1)}h</small>
+                            </div>
+                        </div>
+                        <div class="row mb-2 text-center">
+                             <div class="col-12">
+                                <h6>Errors (30d): <span class="badge bg-danger rounded-pill">${stats.error_count}</span></h6>
+                            </div>
+                        </div>
+                        <canvas id="chart-${streamId}" height="100"></canvas>
+                    </div>
+                </div>
+            `;
+            container.appendChild(card);
+
+            renderChart(streamId, stats.activity);
+        }
+    }
+
+    function renderChart(streamId, activityData) {
+        const ctx = document.getElementById(`chart-${streamId}`).getContext('2d');
+        const labels = activityData.map(d => d.date);
+        const data = activityData.map(d => d.hours);
+
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Activity (Hours)',
+                    data: data,
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Hours' }
+                    },
+                    x: {
+                        display: false
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false
+                    }
+                }
+            }
+        });
+    }
+</script>
+{% endblock %}

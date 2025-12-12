@@ -1,0 +1,23 @@
+body {
+    background-color: #f8f9fa;
+}
+.sidebar {
+    height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 100;
+    padding: 48px 0 0;
+}
+main {
+    padding-top: 48px;
+}
+.status-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.status-running { background-color: #28a745; }
+.status-stopped { background-color: #6c757d; }
+.status-error { background-color: #dc3545; }

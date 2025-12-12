@@ -1,0 +1,27 @@
+[project]
+name = "radio-stream-capture"
+version = "0.1.0"
+description = "Radio Stream Audio Capture Service"
+authors = [
+    {name = "User", email = "user@example.com"},
+]
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.20.0",
+    "sqlmodel>=0.0.14",
+    "alembic>=1.11.0",
+    "passlib[bcrypt]>=1.7.4",
+    "python-jose[cryptography]>=3.3.0",
+    "python-multipart>=0.0.6",
+    "jinja2>=3.1.2",
+    "httpx>=0.24.0",
+    "aiofiles>=23.0.0",
+    "pydantic-settings>=2.0.0",
+    "psutil>=5.9.0",
+    "requests>=2.31.0",  # Ensure we have requests for synchronous needs if any, though mostly async
+]
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

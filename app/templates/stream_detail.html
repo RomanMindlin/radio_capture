@@ -1,0 +1,52 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">{{ stream.name }}</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <button onclick="controlStream('start')" class="btn btn-sm btn-success me-2">Start</button>
+        <button onclick="controlStream('stop')" class="btn btn-sm btn-danger">Stop</button>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">Status</div>
+            <div class="card-body">
+                <p><strong>Status:</strong> <span
+                        class="badge bg-{{ 'success' if stream.current_status == 'running' else 'danger' if stream.current_status == 'error' else 'secondary' }}">{{
+                        stream.current_status }}</span></p>
+                <p><strong>Last Up:</strong> {{ stream.last_up }}</p>
+                <p><strong>Last Error:</strong> {{ stream.last_error }}</p>
+                <p><strong>URL:</strong> {{ stream.url }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">Recent Recordings</div>
+            <ul class="list-group list-group-flush">
+                {% for rec in recordings %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    {{ rec.start_ts }} ({{ rec.duration_seconds }}s)
+                    <a href="/api/recordings/{{ rec.id }}/download"
+                        class="btn btn-sm btn-outline-secondary">Download</a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function controlStream(action) {
+        const resp = await fetch(`/api/streams/{{ stream.id }}/${action}`, { method: 'POST' });
+        if (resp.ok) {
+            location.reload();
+        } else {
+            alert('Action failed');
+        }
+    }
+</script>
+{% endblock %}

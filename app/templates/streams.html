@@ -1,0 +1,44 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Streams</h1>
+    {% if user.role == 'admin' %}
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="/streams/new" class="btn btn-sm btn-outline-secondary">Add New Stream</a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="table-responsive">
+    <table class="table table-striped table-sm">
+        <thead>
+            <tr>
+                <th scope="col">ID</th>
+                <th scope="col">Name</th>
+                <th scope="col">URL</th>
+                <th scope="col">Status</th>
+                <th scope="col">Enabled</th>
+                <th scope="col">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for stream in streams %}
+            <tr>
+                <td>{{ stream.id }}</td>
+                <td>{{ stream.name }}</td>
+                <td>{{ stream.url }}</td>
+                <td>{{ stream.current_status }}</td>
+                <td>{{ stream.enabled }}</td>
+                <td>
+                    <a href="/streams/{{ stream.id }}" class="btn btn-sm btn-info">View</a>
+                    {% if user.role == 'admin' %}
+                    <a href="/streams/{{ stream.id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

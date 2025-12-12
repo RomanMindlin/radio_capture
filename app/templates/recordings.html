@@ -1,0 +1,125 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Recordings</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="exportCSV()">Export CSV</button>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-3">
+        <select class="form-select" id="fileStreamFilter">
+            <option value="">All Streams</option>
+            {% for s in streams %}
+            <option value="{{ s.id }}">{{ s.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3">
+        <input type="date" class="form-control" id="fileDateFrom">
+    </div>
+    <div class="col-md-3">
+        <input type="date" class="form-control" id="fileDateTo">
+    </div>
+    <div class="col-md-3">
+        <button class="btn btn-primary" onclick="loadFiles()">Filter</button>
+    </div>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-striped table-sm">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Stream</th>
+                <th>Date</th>
+                <th>Duration</th>
+                <th>Size</th>
+                <th>Status</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="filesTableBody">
+            <!-- Files injected here -->
+        </tbody>
+    </table>
+    <nav>
+        <ul class="pagination" id="pagination">
+            <li class="page-item"><a class="page-link" href="#" onclick="changePage(-1)">Previous</a></li>
+            <li class="page-item"><a class="page-link" href="#" onclick="changePage(1)">Next</a></li>
+        </ul>
+    </nav>
+</div>
+
+<script>
+    let currentPage = 0;
+    const pageSize = 50;
+
+    document.addEventListener("DOMContentLoaded", () => {
+        loadFiles();
+    });
+
+    async function loadFiles(page = 0) {
+        currentPage = page;
+        const streamId = document.getElementById('fileStreamFilter').value;
+        const dateFrom = document.getElementById('fileDateFrom').value;
+        const dateTo = document.getElementById('fileDateTo').value;
+
+        let url = `/api/stats/files?skip=${page * pageSize}&limit=${pageSize}`;
+        if (streamId) url += `&stream_id=${streamId}`;
+        if (dateFrom) url += `&date_from=${dateFrom}`;
+        if (dateTo) url += `&date_to=${dateTo}`;
+
+        const response = await fetch(url);
+        const files = await response.json();
+        const tbody = document.getElementById('filesTableBody');
+        tbody.innerHTML = '';
+
+        files.forEach(f => {
+            const tr = document.createElement('tr');
+            const date = new Date(f.start_ts).toLocaleString();
+            const sizeMb = (f.size_bytes / (1024 * 1024)).toFixed(2);
+            const duration = new Date(f.duration_seconds * 1000).toISOString().substr(11, 8);
+
+            // Backend returns full recording object with joined stream.
+            let streamName = f.stream_id;
+            if (f.stream && f.stream.name) {
+                streamName = f.stream.name;
+            }
+
+            tr.innerHTML = `
+                <td>${f.id}</td>
+                <td>${streamName}</td>
+                <td>${date}</td>
+                <td>${duration}</td>
+                <td>${sizeMb} MB</td>
+                <td>${f.status}</td>
+                <td>
+                    <a href="/api/stats/files/${f.id}/download" class="btn btn-sm btn-outline-primary">Download</a>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function changePage(delta) {
+        if (currentPage + delta < 0) return;
+        loadFiles(currentPage + delta);
+    }
+
+    function exportCSV() {
+        const streamId = document.getElementById('fileStreamFilter').value;
+        const dateFrom = document.getElementById('fileDateFrom').value;
+        const dateTo = document.getElementById('fileDateTo').value;
+
+        let url = `/api/stats/files/export?`;
+        if (streamId) url += `&stream_id=${streamId}`;
+        if (dateFrom) url += `&date_from=${dateFrom}`;
+        if (dateTo) url += `&date_to=${dateTo}`;
+
+        window.location.href = url;
+    }
+</script>
+{% endblock %}

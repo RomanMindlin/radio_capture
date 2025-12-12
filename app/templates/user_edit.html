@@ -1,0 +1,81 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">{% if user_obj %}Edit User: {{ user_obj.username }}{% else %}New User{% endif %}</h1>
+</div>
+
+<form id="user-form">
+    <div class="mb-3">
+        <label for="username" class="form-label">Username</label>
+        <input type="text" class="form-control" id="username" name="username"
+            value="{{ user_obj.username if user_obj else '' }}" {% if user_obj %}readonly{% endif %} required>
+    </div>
+
+    <div class="mb-3">
+        <label for="password" class="form-label">Password</label>
+        <input type="password" class="form-control" id="password" name="password" {% if not user_obj %}required{% endif
+            %}>
+        {% if user_obj %}
+        <div class="form-text">Leave blank to keep current password.</div>
+        {% endif %}
+    </div>
+
+    <div class="mb-3">
+        <label for="role" class="form-label">Role</label>
+        <select class="form-select" id="role">
+            <option value="operator" {% if user_obj and user_obj.role=='operator' %}selected{% endif %}>Operator
+            </option>
+            <option value="admin" {% if user_obj and user_obj.role=='admin' %}selected{% endif %}>Admin</option>
+        </select>
+    </div>
+
+    <div class="mb-3 form-check">
+        <input type="checkbox" class="form-check-input" id="active" name="active" {% if not user_obj or user_obj.active
+            %}checked{% endif %}>
+        <label class="form-check-label" for="active">Active (User can login)</label>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Save</button>
+    <a href="/settings" class="btn btn-secondary">Cancel</a>
+</form>
+
+<script>
+    document.getElementById('user-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const isNew = {{ 'true' if not user_obj else 'false' }};
+    const userId = {{ user_obj.id if user_obj else 'null' }};
+
+    const data = {
+        username: document.getElementById('username').value,
+        role: document.getElementById('role').value,
+        active: document.getElementById('active').checked
+    };
+
+    const password = document.getElementById('password').value;
+    if (password) {
+        data.password = password;
+    } else if (isNew) {
+        alert("Password is required for new users");
+        return;
+    }
+
+    const url = isNew ? '/api/users/' : '/api/users/' + userId;
+    const method = isNew ? 'POST' : 'PUT';
+
+    const resp = await fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+
+    if (resp.ok) {
+        window.location.href = '/settings';
+    } else {
+        const err = await resp.json();
+        alert('Error saving user: ' + (err.detail || 'Unknown error'));
+    }
+    });
+</script>
+{% endblock %}

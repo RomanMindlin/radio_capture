@@ -1,0 +1,59 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Settings</h1>
+</div>
+
+<h3>Users</h3>
+<div class="mb-3">
+    <a href="/settings/users/new" class="btn btn-primary">Add User</a>
+</div>
+<div class="table-responsive">
+    <table class="table table-striped table-sm">
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+            <tr>
+                <td>{{ u.username }}</td>
+                <td>{{ u.role }}</td>
+                <td>
+                    {% if u.active %}
+                    <span class="badge bg-success">Active</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Inactive</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="/settings/users/{{ u.id }}" class="btn btn-sm btn-outline-primary">Edit</a>
+                    {% if u.username != user.username %}
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteUser({{ u.id }})">Delete</button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+    async function deleteUser(id) {
+        if (!confirm('Are you sure you want to delete this user?')) return;
+        const resp = await fetch('/api/users/' + id, { method: 'DELETE' });
+        if (resp.ok) {
+            location.reload();
+        } else {
+            alert('Error deleting user');
+        }
+    }
+</script>
+
+
+{% endblock %}
