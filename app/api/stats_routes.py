@@ -143,3 +143,33 @@ async def download_file(
         
     filename = os.path.basename(recording.path)
     return FileResponse(recording.path, filename=filename)
+
+@router.get("/files/{file_id}/stream")
+async def stream_file(
+    file_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Stream audio file for in-browser playback.
+    """
+    recording = session.get(Recording, file_id)
+    if not recording:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    if not os.path.exists(recording.path):
+        raise HTTPException(status_code=404, detail="File descriptor exists but file missing on disk")
+    
+    # Determine media type based on file extension
+    file_ext = os.path.splitext(recording.path)[1].lower()
+    media_type_map = {
+        '.mp3': 'audio/mpeg',
+        '.wav': 'audio/wav',
+        '.ogg': 'audio/ogg',
+        '.m4a': 'audio/mp4',
+        '.aac': 'audio/aac',
+        '.flac': 'audio/flac'
+    }
+    media_type = media_type_map.get(file_ext, 'audio/mpeg')
+    
+    return FileResponse(recording.path, media_type=media_type)
