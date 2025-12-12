@@ -61,13 +61,14 @@ def _format_timestamp(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:06.2f}"
 
 
-def transcribe(file_path: str, model: str = "tiny") -> dict:
+def transcribe(file_path: str, model: str = "tiny", language: str = "he") -> dict:
     """
     Transcribe audio file using OpenAI Whisper.
     
     Args:
         file_path: Path to audio file
         model: Whisper model size ("tiny", "small", "medium", "large")
+        language: ISO 639-1 language code (e.g., "he", "en", "ar")
     
     Returns:
         {
@@ -101,15 +102,15 @@ def transcribe(file_path: str, model: str = "tiny") -> dict:
         # Load audio file
         # Whisper expects 16kHz mono audio
         logger.info("Loading audio file...")
-        audio, sr = librosa.load(file_path, sr=16000, mono=True, duration=30.0)
+        audio, sr = librosa.load(file_path, sr=16000, mono=True)
         logger.info(f"Audio loaded: duration={len(audio)/sr:.2f}s, sr={sr}")
         
         # Run Whisper transcription
-        # language="he" for Hebrew, task="transcribe"
-        logger.info("Running Whisper transcription...")
+        # Use configured language for transcription
+        logger.info(f"Running Whisper transcription with language={language}...")
         result = whisper_model.transcribe(
             audio,
-            language="he",  # Hebrew
+            language=language,
             task="transcribe",
             verbose=False,
             fp16=False  # Disable fp16 for CPU compatibility

@@ -22,6 +22,19 @@
         <label class="form-check-label" for="enabled">Enabled</label>
     </div>
 
+    <div class="mb-3">
+        <label for="language" class="form-label">Language (for ASR)</label>
+        <select class="form-select" id="language">
+            {% set lang = stream.language if stream else 'he' %}
+            <option value="he" {% if lang=='he' %}selected{% endif %}>Hebrew (he)</option>
+            <option value="en" {% if lang=='en' %}selected{% endif %}>English (en)</option>
+            <option value="ar" {% if lang=='ar' %}selected{% endif %}>Arabic (ar)</option>
+            <option value="ru" {% if lang=='ru' %}selected{% endif %}>Russian (ru)</option>
+            <option value="es" {% if lang=='es' %}selected{% endif %}>Spanish (es)</option>
+            <option value="fr" {% if lang=='fr' %}selected{% endif %}>French (fr)</option>
+        </select>
+    </div>
+
     <h4>Mandatory Parameters</h4>
     <div class="mb-3">
         <label for="format" class="form-label">Format</label>
@@ -68,6 +81,7 @@
         name: document.getElementById('name').value,
         url: document.getElementById('url').value,
         enabled: document.getElementById('enabled').checked,
+        language: document.getElementById('language').value,
         mandatory_params: {
             format: document.getElementById('format').value,
             segment_time: parseInt(document.getElementById('segment_time').value),

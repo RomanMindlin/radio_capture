@@ -23,6 +23,7 @@ class Stream(SQLModel, table=True):
     name: str = Field(index=True, unique=True)
     url: str
     enabled: bool = Field(default=True)
+    language: str = Field(default="he", max_length=10)  # ISO 639-1 language code for ASR
     
     # JSON fields
     # mandatory_params example: {"format": "mp3", "segment_time": 3600, "channels": 2}

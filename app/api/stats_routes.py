@@ -275,8 +275,10 @@ async def transcribe_file(
     # Run transcription
     start_time = time.time()
     try:
-        logger.info(f"Starting ASR for recording {file_id} with model {model}")
-        result = transcribe(recording.path, model=model)
+        # Get language from stream configuration
+        stream_language = recording.stream.language if recording.stream else "he"
+        logger.info(f"Starting ASR for recording {file_id} with model {model}, language {stream_language}")
+        result = transcribe(recording.path, model=model, language=stream_language)
         processing_time = time.time() - start_time
         
         # Update database with results

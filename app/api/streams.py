@@ -44,6 +44,7 @@ async def update_stream(stream_id: int, stream_data: Stream, session: Session = 
     db_stream.mandatory_params = stream_data.mandatory_params
     db_stream.optional_params = stream_data.optional_params
     db_stream.enabled = stream_data.enabled
+    db_stream.language = stream_data.language
     
     session.add(db_stream)
     session.commit()
