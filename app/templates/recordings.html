@@ -28,6 +28,13 @@
     </div>
 </div>
 
+<!-- Audio Player -->
+<div class="mb-3">
+    <audio id="audioPlayer" controls style="width: 100%; display: none;">
+        Your browser does not support the audio element.
+    </audio>
+</div>
+
 <div class="table-responsive">
     <table class="table table-striped table-sm">
         <thead>
@@ -56,10 +63,56 @@
 <script>
     let currentPage = 0;
     const pageSize = 50;
+    let currentPlayingId = null;
 
     document.addEventListener("DOMContentLoaded", () => {
         loadFiles();
     });
+
+    function playAudio(fileId) {
+        const audioPlayer = document.getElementById('audioPlayer');
+        const streamUrl = `/api/stats/files/${fileId}/stream`;
+        
+        // If clicking the same file that's playing, toggle pause/play
+        if (currentPlayingId === fileId && !audioPlayer.paused) {
+            audioPlayer.pause();
+            updatePlayButton(fileId, false);
+            return;
+        }
+        
+        // Reset previous playing button if different file
+        if (currentPlayingId !== null && currentPlayingId !== fileId) {
+            updatePlayButton(currentPlayingId, false);
+        }
+        
+        // Load and play new file
+        audioPlayer.src = streamUrl;
+        audioPlayer.style.display = 'block';
+        audioPlayer.play();
+        currentPlayingId = fileId;
+        updatePlayButton(fileId, true);
+        
+        // Handle when audio ends
+        audioPlayer.onended = () => {
+            updatePlayButton(fileId, false);
+            currentPlayingId = null;
+        };
+    }
+    
+    function updatePlayButton(fileId, isPlaying) {
+        const button = document.getElementById(`play-btn-${fileId}`);
+        if (button) {
+            if (isPlaying) {
+                button.innerHTML = '⏸️ Pause';
+                button.classList.remove('btn-outline-success');
+                button.classList.add('btn-success');
+            } else {
+                button.innerHTML = '▶️ Play';
+                button.classList.remove('btn-success');
+                button.classList.add('btn-outline-success');
+            }
+        }
+    }
 
     async function loadFiles(page = 0) {
         currentPage = page;
@@ -97,6 +150,7 @@
                 <td>${sizeMb} MB</td>
                 <td>${f.status}</td>
                 <td>
+                    <button id="play-btn-${f.id}" class="btn btn-sm btn-outline-success me-1" onclick="playAudio(${f.id})">▶️ Play</button>
                     <a href="/api/stats/files/${f.id}/download" class="btn btn-sm btn-outline-primary">Download</a>
                 </td>
             `;
