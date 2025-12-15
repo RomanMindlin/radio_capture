@@ -66,7 +66,12 @@ async def stream_detail(request: Request, stream_id: int, user: User = Depends(l
     if not stream: return RedirectResponse("/streams")
     
     # Get recent recordings
-    recordings = session.exec(select(Recording).where(Recording.stream_id == stream.id).order_by(desc(Recording.start_ts)).limit(20)).all()
+    recordings = session.exec(
+        select(Recording)
+        .where(Recording.stream_id == stream.id, Recording.status != "deleted")
+        .order_by(desc(Recording.start_ts))
+        .limit(20)
+    ).all()
     
     return templates.TemplateResponse("stream_detail.html", {"request": request, "user": user, "stream": stream, "recordings": recordings})
 
@@ -76,8 +81,6 @@ async def edit_stream_page(request: Request, stream_id: int, user: User = Depend
     if user.role != UserRole.ADMIN: return RedirectResponse("/dashboard")
     stream = session.get(Stream, stream_id)
     return templates.TemplateResponse("stream_edit.html", {"request": request, "user": user, "stream": stream})
-
-from sqlalchemy.orm import joinedload
 
 @router.get("/recordings")
 async def recordings_page(request: Request, user: User = Depends(login_required), session: Session = Depends(get_session)):

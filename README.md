@@ -10,6 +10,7 @@ A web-based service for capturing and managing radio stream recordings with auto
 - **User Management**: Role-based access control (Admin/Operator)
 - **Statistics & Analytics**: Detailed recording metrics with Chart.js visualizations
 - **File Management**: Browse, filter, download, and export recordings
+- **Retention Policy**: Automatic cleanup removes recordings older than 3 days (metadata kept for audit)
 - **Telegram Notifications**: Optional alerts for stream errors and daily reports
 - **Database Migrations**: Alembic-based schema versioning
 
@@ -77,6 +78,10 @@ Streams are configured via the web UI with the following parameters:
 - `bitrate`: Audio bitrate (e.g., `128k`)
 - `retention_days`: Days to keep recordings (default: 30)
 - `retry_delay`: Seconds to wait before retry on error
+
+### Recording Retention
+
+Recordings older than **3 days** are automatically purged from disk by the background watcher. Their database entries remain for historical/statistical use but are marked with a `deleted` status so they no longer appear in file listings or downloads. This keeps storage healthy without losing high-level metadata.
 
 ## Project Structure
 

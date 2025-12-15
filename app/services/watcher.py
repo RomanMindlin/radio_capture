@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlmodel import Session, select
 
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 class RecordingWatcher:
     def __init__(self):
         self.running = False
+        self._last_cleanup: datetime | None = None
 
     async def start(self):
         self.running = True
@@ -24,6 +25,7 @@ class RecordingWatcher:
         while self.running:
             try:
                 await self.scan_files()
+                await self.maybe_cleanup_old_recordings()
             except Exception as e:
                 logger.error(f"Error in watcher loop: {e}")
             await asyncio.sleep(60) # Scan every minute
@@ -54,7 +56,12 @@ class RecordingWatcher:
                         # Optimization: check if we already have this path
                         # Ideally we use a cache or bloom filter, but SQL is okay for <100k files.
                         # We can query by path.
-                        existing = session.exec(select(Recording).where(Recording.path == full_path)).first()
+                        existing = session.exec(
+                            select(Recording).where(
+                                Recording.path == full_path,
+                                Recording.status != "deleted"
+                            )
+                        ).first()
                         if existing:
                             continue
                             
@@ -103,5 +110,47 @@ class RecordingWatcher:
         except Exception as e:
             logger.error(f"Error getting duration for {path}: {e}")
         return 0.0
+
+    async def maybe_cleanup_old_recordings(self):
+        """
+        Periodically purge recordings older than 3 days from disk and mark them deleted in DB.
+        """
+        now = datetime.utcnow()
+        # Run cleanup at most once per hour to limit disk churn
+        if self._last_cleanup and (now - self._last_cleanup) < timedelta(hours=1):
+            return
+
+        await asyncio.to_thread(self.cleanup_old_recordings)
+        self._last_cleanup = now
+
+    def cleanup_old_recordings(self):
+        cutoff = datetime.utcnow() - timedelta(days=3)
+        with Session(engine) as session:
+            old_recordings = session.exec(
+                select(Recording)
+                .where(Recording.start_ts < cutoff, Recording.status != "deleted")
+                .order_by(Recording.start_ts)
+                .limit(500)
+            ).all()
+
+            if not old_recordings:
+                return
+
+            logger.info(f"Cleaning up {len(old_recordings)} old recordings.")
+
+            for recording in old_recordings:
+                try:
+                    if recording.path and os.path.exists(recording.path):
+                        os.remove(recording.path)
+                        logger.info(f"Deleted old recording file {recording.path}")
+                    elif recording.path:
+                        logger.warning(f"Recording file already missing: {recording.path}")
+
+                    recording.status = "deleted"
+                    session.add(recording)
+                    session.commit()
+                except Exception as e:
+                    session.rollback()
+                    logger.error(f"Failed to delete recording {recording.id}: {e}")
 
 watcher = RecordingWatcher()

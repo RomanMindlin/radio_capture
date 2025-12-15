@@ -38,22 +38,13 @@ async def list_files(
     """
     List recordings with filtering.
     """
-    query = select(Recording).order_by(desc(Recording.start_ts))
-    
-    if stream_id:
-        query = query.where(Recording.stream_id == stream_id)
-        
-    if date_from:
-        dt_from = datetime.strptime(date_from, "%Y-%m-%d")
-        query = query.where(Recording.start_ts >= dt_from)
-        
-    if date_to:
-        dt_to = datetime.strptime(date_to, "%Y-%m-%d")
-        dt_to = dt_to.replace(hour=23, minute=59, second=59)
-        query = query.where(Recording.start_ts <= dt_to)
-    
     from sqlalchemy.orm import joinedload
-    query = select(Recording).options(joinedload(Recording.stream)).order_by(desc(Recording.start_ts))
+    query = (
+        select(Recording)
+        .options(joinedload(Recording.stream))
+        .where(Recording.status != "deleted")
+        .order_by(desc(Recording.start_ts))
+    )
     
     if stream_id:
         query = query.where(Recording.stream_id == stream_id)
@@ -94,7 +85,12 @@ async def export_files_csv(
     Export filtered recordings to CSV.
     """
     from sqlalchemy.orm import joinedload
-    query = select(Recording).options(joinedload(Recording.stream)).order_by(desc(Recording.start_ts))
+    query = (
+        select(Recording)
+        .options(joinedload(Recording.stream))
+        .where(Recording.status != "deleted")
+        .order_by(desc(Recording.start_ts))
+    )
     
     if stream_id: query = query.where(Recording.stream_id == stream_id)
     if date_from: 
@@ -138,6 +134,9 @@ async def download_file(
     if not recording:
         raise HTTPException(status_code=404, detail="File not found")
     
+    if recording.status == "deleted":
+        raise HTTPException(status_code=404, detail="Recording has been deleted")
+    
     if not os.path.exists(recording.path):
         raise HTTPException(status_code=404, detail="File descriptor exists but file missing on disk")
         
@@ -156,6 +155,9 @@ async def stream_file(
     recording = session.get(Recording, file_id)
     if not recording:
         raise HTTPException(status_code=404, detail="File not found")
+    
+    if recording.status == "deleted":
+        raise HTTPException(status_code=404, detail="Recording has been deleted")
     
     if not os.path.exists(recording.path):
         raise HTTPException(status_code=404, detail="File descriptor exists but file missing on disk")
