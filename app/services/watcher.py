@@ -2,12 +2,15 @@ import asyncio
 import logging
 import os
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
 from sqlmodel import Session, select
 
 from app.core.db import engine
 from app.models.models import Recording, Stream
+from app.services.audio_classifier import classify_audio
+from app.services.asr import transcribe
 
 logger = logging.getLogger(__name__)
 DEFAULT_RETENTION_DAYS = 3
@@ -16,6 +19,10 @@ class RecordingWatcher:
     def __init__(self):
         self.running = False
         self._last_cleanup: datetime | None = None
+        # Thread pool for CPU-intensive tasks (classification and ASR)
+        # max_workers=1 ensures only one file is processed at a time
+        # we need it since ASR isn't thread-safe
+        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="watcher-worker")
 
     async def start(self):
         self.running = True
@@ -82,6 +89,7 @@ class RecordingWatcher:
                             ts_str = file.split("_")[1].split(".")[0]
                             start_ts = datetime.strptime(ts_str, "%Y%m%d%H%M%S")
                             
+                            # Create recording entry immediately without classification/ASR
                             rec = Recording(
                                 stream_id=stream.id,
                                 path=full_path,
@@ -92,9 +100,68 @@ class RecordingWatcher:
                             )
                             session.add(rec)
                             session.commit()
-                            logger.info(f"Discovered new recording: {file}")
+                            session.refresh(rec)
+                            logger.info(f"Discovered new recording: {file} (ID: {rec.id})")
+                            
+                            # Schedule classification and ASR in background thread
+                            stream_language = stream.language if hasattr(stream, 'language') and stream.language else "he"
+                            asyncio.create_task(
+                                self._process_recording_async(rec.id, full_path, stream_language)
+                            )
                         except Exception as e:
                             logger.error(f"Error processing file {file}: {e}")
+
+    async def _process_recording_async(self, recording_id: int, file_path: str, language: str):
+        """
+        Process recording in background thread: classify and transcribe if needed.
+        This runs asynchronously to avoid blocking the main watcher loop.
+        """
+        try:
+            # Run classification in thread pool
+            loop = asyncio.get_event_loop()
+            classification = await loop.run_in_executor(
+                self._executor,
+                classify_audio,
+                file_path
+            )
+            logger.info(f"Classified recording {recording_id} as '{classification}'")
+            
+            # Update database with classification
+            with Session(engine) as session:
+                recording = session.get(Recording, recording_id)
+                if recording:
+                    recording.classification = classification
+                    session.add(recording)
+                    session.commit()
+            
+            # If speech, run ASR in thread pool
+            if classification == "speech":
+                logger.info(f"Starting ASR for recording {recording_id} with language {language}")
+                result = await loop.run_in_executor(
+                    self._executor,
+                    transcribe,
+                    file_path,
+                    "tiny",
+                    language
+                )
+                
+                # Update database with transcription
+                with Session(engine) as session:
+                    recording = session.get(Recording, recording_id)
+                    if recording:
+                        recording.transcript = result["transcript"]
+                        recording.transcript_json = {"segments": result["segments"]}
+                        recording.asr_model = result["model"]
+                        recording.asr_confidence = result["confidence"]
+                        recording.asr_ts = datetime.utcnow()
+                        session.add(recording)
+                        session.commit()
+                        logger.info(f"Transcribed recording {recording_id}: {len(result['transcript'])} chars, {len(result['segments'])} segments")
+            else:
+                logger.info(f"Skipping ASR for recording {recording_id} (classification: {classification})")
+                
+        except Exception as e:
+            logger.error(f"Error processing recording {recording_id}: {e}")
 
     def get_duration(self, path: str) -> float:
         try:

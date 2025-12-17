@@ -71,7 +71,11 @@ async def list_files(
             "size_bytes": r.size_bytes,
             "duration_seconds": r.duration_seconds,
             "status": r.status,
-            "classification": r.classification
+            "classification": r.classification,
+            "transcript": r.transcript,
+            "transcript_json": r.transcript_json,
+            "asr_model": r.asr_model,
+            "asr_confidence": r.asr_confidence
         })
     
     return response_data
@@ -179,140 +183,34 @@ async def stream_file(
     
     return FileResponse(recording.path, media_type=media_type)
 
-@router.post("/files/{file_id}/classify")
-async def classify_file(
+@router.get("/files/{file_id}/asr")
+async def get_transcription(
     file_id: int,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Classify audio file as speech, music, or ad using PANNs CNN14 model.
+    Get existing transcription for an audio file.
+    Returns transcription with timestamps and metadata if available.
     """
-    from app.services.audio_classifier import classify_audio
-    
     # Get recording from database
     recording = session.get(Recording, file_id)
     if not recording:
         raise HTTPException(status_code=404, detail="Recording not found")
     
-    # Check if file exists on disk
-    if not os.path.exists(recording.path):
-        raise HTTPException(
-            status_code=404, 
-            detail="File descriptor exists but file missing on disk"
-        )
-    
-    try:
-        # Run classification
-        classification = classify_audio(recording.path)
-        
-        # Update database
-        recording.classification = classification
-        session.add(recording)
-        session.commit()
-        session.refresh(recording)
-        
-        # Return updated metadata
-        return {
-            "id": recording.id,
-            "path": recording.path,
-            "classification": recording.classification,
-            "stream_id": recording.stream_id,
-            "start_ts": recording.start_ts.isoformat(),
-            "status": recording.status,
-            "message": f"Successfully classified as '{classification}'"
-        }
-        
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        # Don't overwrite existing classification on error
-        raise HTTPException(
-            status_code=500,
-            detail=f"Classification failed: {str(e)}"
-        )
-
-@router.post("/files/{file_id}/asr")
-async def transcribe_file(
-    file_id: int,
-    model: str = "tiny",
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Transcribe audio file using Whisper ASR.
-    Returns transcription with timestamps and metadata.
-    """
-    import time
-    from app.services.asr import transcribe
-    
-    # Get recording from database
-    recording = session.get(Recording, file_id)
-    if not recording:
-        raise HTTPException(status_code=404, detail="Recording not found")
-    
-    # Check if file exists on disk
-    if not os.path.exists(recording.path):
+    # Check if transcription exists
+    if not recording.transcript or not recording.asr_ts:
         raise HTTPException(
             status_code=404,
-            detail="File not found on disk"
+            detail="No transcription available for this recording"
         )
     
-    # Check cache: if already transcribed with same model, return cached result
-    model_id = f"whisper-{model}"
-    if recording.asr_ts and recording.asr_model == model_id:
-        logger.info(f"Returning cached transcription for recording {file_id}")
-        return {
-            "recording_id": recording.id,
-            "transcript": recording.transcript,
-            "segments": recording.transcript_json.get("segments", []) if recording.transcript_json else [],
-            "model": recording.asr_model,
-            "confidence": recording.asr_confidence or 0.0,
-            "processing_seconds": 0.0,  # Cached result
-            "cached": True
-        }
-    
-    # Run transcription
-    start_time = time.time()
-    try:
-        # Get language from stream configuration
-        stream_language = recording.stream.language if recording.stream else "he"
-        logger.info(f"Starting ASR for recording {file_id} with model {model}, language {stream_language}")
-        result = transcribe(recording.path, model=model, language=stream_language)
-        processing_time = time.time() - start_time
-        
-        # Update database with results
-        recording.transcript = result["transcript"]
-        recording.transcript_json = {
-            "segments": result["segments"]
-        }
-        recording.asr_model = result["model"]
-        recording.asr_confidence = result["confidence"]
-        recording.asr_ts = datetime.utcnow()
-        
-        session.add(recording)
-        session.commit()
-        session.refresh(recording)
-        
-        logger.info(f"ASR completed for recording {file_id} in {processing_time:.2f}s")
-        
-        # Return response
-        return {
-            "recording_id": recording.id,
-            "transcript": result["transcript"],
-            "segments": result["segments"],
-            "model": result["model"],
-            "confidence": result["confidence"],
-            "processing_seconds": round(processing_time, 2),
-            "cached": False
-        }
-        
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error(f"ASR failed for recording {file_id}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"ASR failed: {str(e)}"
-        )
+    # Return existing transcription
+    return {
+        "recording_id": recording.id,
+        "transcript": recording.transcript,
+        "segments": recording.transcript_json.get("segments", []) if recording.transcript_json else [],
+        "model": recording.asr_model,
+        "confidence": recording.asr_confidence or 0.0
+    }
 

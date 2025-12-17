@@ -135,53 +135,6 @@
         }
     }
 
-    async function classifyAudio(fileId) {
-        const button = document.getElementById(`classify-btn-${fileId}`);
-        const classificationCell = document.getElementById(`classification-${fileId}`);
-
-        // Show loading state
-        const originalText = button.innerHTML;
-        button.disabled = true;
-        button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Classifying...';
-
-        try {
-            const response = await fetch(`/api/stats/files/${fileId}/classify`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail || 'Classification failed');
-            }
-
-            const result = await response.json();
-
-            // Update the classification cell with the result
-            classificationCell.innerHTML = getClassificationBadge(result.classification);
-
-            // Show success message briefly
-            button.innerHTML = '✓ Classified';
-            button.classList.remove('btn-outline-warning');
-            button.classList.add('btn-success');
-
-            setTimeout(() => {
-                button.innerHTML = originalText;
-                button.classList.remove('btn-success');
-                button.classList.add('btn-outline-warning');
-                button.disabled = false;
-            }, 2000);
-
-        } catch (error) {
-            console.error('Classification error:', error);
-            alert(`Classification failed: ${error.message}`);
-            button.innerHTML = originalText;
-            button.disabled = false;
-        }
-    }
-
     function getClassificationBadge(classification) {
         if (!classification) {
             return '<span class="badge bg-secondary">—</span>';
@@ -196,54 +149,12 @@
         return badges[classification] || '<span class="badge bg-secondary">Unknown</span>';
     }
 
-    async function transcribeAudio(fileId) {
-        const button = document.getElementById(`asr-btn-${fileId}`);
-        const originalText = button.innerHTML;
-
-        try {
-            // Show loading state
-            button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Transcribing...';
-            button.disabled = true;
-
-            // Call ASR endpoint
-            const response = await fetch(`/api/stats/files/${fileId}/asr`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail || 'ASR failed');
-            }
-
-            const result = await response.json();
-
-            // Display transcription in modal
-            displayTranscription(result);
-
-            // Show success briefly
-            button.innerHTML = '✓ Transcribed';
-            button.classList.remove('btn-outline-info');
-            button.classList.add('btn-success');
-
-            setTimeout(() => {
-                button.innerHTML = originalText;
-                button.classList.remove('btn-success');
-                button.classList.add('btn-outline-info');
-                button.disabled = false;
-            }, 2000);
-
-        } catch (error) {
-            console.error('ASR error:', error);
-            alert(`Transcription failed: ${error.message}`);
-            button.innerHTML = originalText;
-            button.disabled = false;
+    function viewTranscription(fileId, transcriptionData) {
+        if (!transcriptionData || !transcriptionData.transcript) {
+            alert('No transcription available for this recording.');
+            return;
         }
-    }
 
-    function displayTranscription(result) {
         const content = document.getElementById('asrContent');
 
         // Build HTML for transcription display
@@ -251,33 +162,27 @@
             <div class="mb-3">
                 <h6>Full Transcript:</h6>
                 <div class="p-3 bg-light rounded" style="max-height: 200px; overflow-y: auto; direction: rtl; text-align: right;">
-                    ${result.transcript || 'No transcription available'}
+                    ${transcriptionData.transcript || 'No transcription available'}
                 </div>
             </div>
         `;
 
-        // Add metadata
-        html += `
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <small class="text-muted">Model:</small> <strong>${result.model}</strong>
+        // Add metadata if available
+        if (transcriptionData.asr_model) {
+            html += `
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <small class="text-muted">Model:</small> <strong>${transcriptionData.asr_model}</strong>
+                    </div>
+                    <div class="col-md-6">
+                        <small class="text-muted">Confidence:</small> <strong>${((transcriptionData.asr_confidence || 0) * 100).toFixed(1)}%</strong>
+                    </div>
                 </div>
-                <div class="col-md-6">
-                    <small class="text-muted">Confidence:</small> <strong>${(result.confidence * 100).toFixed(1)}%</strong>
-                </div>
-            </div>
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <small class="text-muted">Processing Time:</small> <strong>${result.processing_seconds}s</strong>
-                </div>
-                <div class="col-md-6">
-                    <small class="text-muted">Cached:</small> <strong>${result.cached ? 'Yes' : 'No'}</strong>
-                </div>
-            </div>
-        `;
+            `;
+        }
 
         // Add segments if available
-        if (result.segments && result.segments.length > 0) {
+        if (transcriptionData.segments && transcriptionData.segments.length > 0) {
             html += `
                 <div class="mb-3">
                     <h6>Segments:</h6>
@@ -293,7 +198,7 @@
                             <tbody>
             `;
 
-            result.segments.forEach(seg => {
+            transcriptionData.segments.forEach(seg => {
                 html += `
                     <tr>
                         <td><small>${seg.start}</small></td>
@@ -346,6 +251,20 @@
                 streamName = f.stream.name;
             }
 
+            // Prepare transcription data for the button
+            const hasTranscript = f.transcript && f.transcript.trim().length > 0;
+            const transcriptionData = hasTranscript ? {
+                transcript: f.transcript,
+                asr_model: f.asr_model,
+                asr_confidence: f.asr_confidence,
+                segments: f.transcript_json?.segments || []
+            } : null;
+
+            // Determine ASR button state
+            const asrButtonClass = hasTranscript ? 'btn-info' : 'btn-outline-secondary';
+            const asrButtonDisabled = hasTranscript ? '' : 'disabled';
+            const asrButtonTitle = hasTranscript ? 'View transcription' : 'No transcription available';
+
             tr.innerHTML = `
                 <td>${f.id}</td>
                 <td>${streamName}</td>
@@ -356,12 +275,21 @@
                 <td id="classification-${f.id}">${getClassificationBadge(f.classification)}</td>
                 <td>
                     <button id="play-btn-${f.id}" class="btn btn-sm btn-outline-success me-1" onclick="playAudio(${f.id})">▶️ Play</button>
-                    <button id="classify-btn-${f.id}" class="btn btn-sm btn-outline-warning me-1" onclick="classifyAudio(${f.id})">🏷️ Classify</button>
-                    <button id="asr-btn-${f.id}" class="btn btn-sm btn-outline-info me-1" onclick="transcribeAudio(${f.id})">🎤 ASR</button>
+                    <button id="asr-btn-${f.id}" class="btn btn-sm ${asrButtonClass} me-1" ${asrButtonDisabled} title="${asrButtonTitle}">🎤 View</button>
                     <a href="/api/stats/files/${f.id}/download" class="btn btn-sm btn-outline-primary">Download</a>
                 </td>
             `;
             tbody.appendChild(tr);
+
+            // Add click handler for ASR button if transcript exists
+            if (hasTranscript) {
+                setTimeout(() => {
+                    const asrBtn = document.getElementById(`asr-btn-${f.id}`);
+                    if (asrBtn) {
+                        asrBtn.onclick = () => viewTranscription(f.id, transcriptionData);
+                    }
+                }, 0);
+            }
         });
     }
 
