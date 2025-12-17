@@ -34,7 +34,15 @@ def _load_model(model_name: str = "tiny"):
     if _whisper_model is None or _current_model_name != model_name:
         logger.info(f"Loading Whisper model: {model_name}")
         try:
-            _whisper_model = whisper.load_model(model_name)
+            # Set cache directory for model downloads to persistent volume
+            cache_dir = os.environ.get('WHISPER_CACHE_DIR', '/data/models/whisper')
+            os.makedirs(cache_dir, exist_ok=True)
+            
+            # Whisper uses XDG_CACHE_HOME or TORCH_HOME for model cache
+            os.environ['XDG_CACHE_HOME'] = cache_dir
+            
+            logger.info(f"Using Whisper cache directory: {cache_dir}")
+            _whisper_model = whisper.load_model(model_name, download_root=cache_dir)
             _current_model_name = model_name
             logger.info(f"Whisper model {model_name} loaded successfully")
         except Exception as e:

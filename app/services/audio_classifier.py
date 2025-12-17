@@ -28,9 +28,16 @@ def _get_model():
             os.environ['OMP_NUM_THREADS'] = '1'
             os.environ['MKL_NUM_THREADS'] = '1'
             
+            # Set cache directory for model downloads to persistent volume
+            cache_dir = os.environ.get('PANNS_CACHE_DIR', '/data/models/panns')
+            os.makedirs(cache_dir, exist_ok=True)
+            
+            # Set torch hub cache to persistent location
+            torch.hub.set_dir(cache_dir)
+            
             from panns_inference import AudioTagging
             
-            logger.info("Loading PANNs CNN14 model...")
+            logger.info(f"Loading PANNs CNN14 model (cache dir: {cache_dir})...")
             _model = AudioTagging(checkpoint_path=None, device='cpu')
             
             # AudioSet class labels that we'll use for classification
