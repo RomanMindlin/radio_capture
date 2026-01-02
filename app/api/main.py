@@ -6,7 +6,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select
 
-from app.api import auth, recordings, streams, ui_routes, users
+from app.api import auth, recordings, speech_blocks, stats_routes, streams, ui_routes, users
 from app.api.auth import get_password_hash
 from app.core.db import create_db_and_tables, engine, get_session
 from app.models.models import User, UserRole
@@ -24,9 +24,9 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(streams.router, prefix="/api/streams", tags=["streams"])
 app.include_router(recordings.router, prefix="/api/recordings", tags=["recordings"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
-from app.api import stats_routes
 
 app.include_router(stats_routes.router, prefix="/api/stats", tags=["stats"])
+app.include_router(speech_blocks.router, prefix="/api", tags=["speech_blocks"])
 
 app.include_router(ui_routes.router)
 

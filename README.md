@@ -192,6 +192,19 @@ Access container shell:
 docker exec -it radio-service /bin/bash
 ```
 
+## Speech Blocks
+
+Speech chunks can be merged into daily speech blocks for downstream analysis using the deterministic builder (gap threshold 5s, minimum duration 60s). Rebuild blocks for a station/day via the API:
+
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  http://localhost:8000/api/stations/<station_id>/speech-blocks/rebuild \
+  -d '{"date": "2025-01-27"}'
+```
+
+Listing for a given day is available at `/speech-blocks` in the UI or via `GET /api/stations/{station_id}/speech-blocks?date=YYYY-MM-DD`.
+
 ## Backup & Restore
 
 ### Backup

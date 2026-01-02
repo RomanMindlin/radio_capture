@@ -88,6 +88,13 @@ async def recordings_page(request: Request, user: User = Depends(login_required)
     streams = session.exec(select(Stream)).all()
     return templates.TemplateResponse("recordings.html", {"request": request, "user": user, "streams": streams})
 
+@router.get("/speech-blocks")
+async def speech_blocks_page(request: Request, user: User = Depends(login_required), session: Session = Depends(get_session)):
+    if not user:
+        return RedirectResponse("/login")
+    streams = session.exec(select(Stream)).all()
+    return templates.TemplateResponse("speech_blocks.html", {"request": request, "user": user, "streams": streams})
+
 @router.get("/settings")
 async def settings_page(request: Request, user: User = Depends(login_required), session: Session = Depends(get_session)):
     if not user: return RedirectResponse("/login")

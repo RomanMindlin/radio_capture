@@ -38,6 +38,7 @@ class Stream(SQLModel, table=True):
 
     recordings: List["Recording"] = Relationship(back_populates="stream")
     events: List["Event"] = Relationship(back_populates="stream")
+    speech_blocks: List["SpeechBlock"] = Relationship(back_populates="stream")
 
 class Recording(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -76,3 +77,17 @@ class Notification(SQLModel, table=True):
     daily_report_time: Optional[str] = None # HH:MM format
     thresholds: dict = Field(default={}, sa_column=Column(JSON)) 
     # thresholds example: {"disk_min_gb": 5, "error_burst_limit": 10}
+
+class SpeechBlock(SQLModel, table=True):
+    __tablename__ = "speech_blocks"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    stream_id: int = Field(foreign_key="stream.id", index=True)
+    start_ts: datetime
+    end_ts: datetime
+    duration_seconds: float
+    chunk_ids: List[int] = Field(default_factory=list, sa_column=Column(JSON))
+    text: str = Field(default="")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    stream: Optional[Stream] = Relationship(back_populates="speech_blocks")

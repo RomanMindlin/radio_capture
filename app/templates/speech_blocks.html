@@ -1,0 +1,164 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Speech Blocks</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <button class="btn btn-sm btn-outline-primary" onclick="rebuildBlocks()">Rebuild for Day</button>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-4">
+        <label class="form-label">Station</label>
+        <select class="form-select" id="sbStreamSelect">
+            {% for s in streams %}
+            <option value="{{ s.id }}">{{ s.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-4">
+        <label class="form-label">Date</label>
+        <input type="date" class="form-control" id="sbDateInput">
+    </div>
+    <div class="col-md-4 d-flex align-items-end justify-content-end">
+        <button class="btn btn-primary me-2" onclick="loadBlocks()">Load</button>
+        <button class="btn btn-outline-secondary" onclick="clearTable()">Clear</button>
+    </div>
+</div>
+
+<div id="sbStatus" class="alert alert-info d-none"></div>
+
+<div class="table-responsive">
+    <table class="table table-striped table-sm">
+        <thead>
+            <tr>
+                <th>Start</th>
+                <th>End</th>
+                <th>Duration</th>
+                <th># Chunks</th>
+                <th>Text Preview</th>
+            </tr>
+        </thead>
+        <tbody id="speechBlocksBody">
+        </tbody>
+    </table>
+</div>
+
+<script>
+    const previewLength = 140;
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const dateInput = document.getElementById("sbDateInput");
+        const today = new Date();
+        dateInput.value = today.toISOString().substring(0, 10);
+        // Auto-load for first stream if available
+        const streamSelect = document.getElementById("sbStreamSelect");
+        if (streamSelect && streamSelect.value) {
+            loadBlocks();
+        }
+    });
+
+    function setStatus(message, cls = "info") {
+        const el = document.getElementById("sbStatus");
+        if (!message) {
+            el.classList.add("d-none");
+            el.innerText = "";
+            return;
+        }
+        el.className = `alert alert-${cls}`;
+        el.innerText = message;
+    }
+
+    function clearTable() {
+        document.getElementById("speechBlocksBody").innerHTML = "";
+        setStatus("");
+    }
+
+    function formatDuration(seconds) {
+        const total = Math.round(seconds);
+        const hrs = Math.floor(total / 3600);
+        const mins = Math.floor((total % 3600) / 60);
+        const secs = total % 60;
+        if (hrs > 0) {
+            return `${hrs}h ${mins}m ${secs}s`;
+        }
+        if (mins > 0) {
+            return `${mins}m ${secs}s`;
+        }
+        return `${secs}s`;
+    }
+
+    async function loadBlocks() {
+        const streamId = document.getElementById("sbStreamSelect").value;
+        const dateVal = document.getElementById("sbDateInput").value;
+        if (!streamId || !dateVal) {
+            setStatus("Select both station and date.", "warning");
+            return;
+        }
+        setStatus("Loading speech blocks...");
+
+        try {
+            const resp = await fetch(`/api/stations/${streamId}/speech-blocks?date=${dateVal}`);
+            if (!resp.ok) {
+                throw new Error(`Request failed with status ${resp.status}`);
+            }
+            const blocks = await resp.json();
+            renderBlocks(blocks);
+            if (blocks.length === 0) {
+                setStatus("No speech blocks for the selected day.", "secondary");
+            } else {
+                const totalSeconds = blocks.reduce((acc, b) => acc + (b.duration_seconds || 0), 0);
+                setStatus(`Loaded ${blocks.length} block(s), ${Math.round(totalSeconds / 60)} minute(s) total.`, "success");
+            }
+        } catch (err) {
+            console.error(err);
+            setStatus("Failed to load speech blocks.", "danger");
+        }
+    }
+
+    function renderBlocks(blocks) {
+        const body = document.getElementById("speechBlocksBody");
+        body.innerHTML = "";
+
+        blocks.forEach(b => {
+            const tr = document.createElement("tr");
+            const preview = (b.text || "").slice(0, previewLength);
+            const endPreview = (b.text && b.text.length > previewLength) ? "…" : "";
+            tr.innerHTML = `
+                <td>${new Date(b.start_ts).toLocaleString()}</td>
+                <td>${new Date(b.end_ts).toLocaleString()}</td>
+                <td>${formatDuration(b.duration_seconds)}</td>
+                <td>${(b.chunk_ids || []).length}</td>
+                <td>${preview}${endPreview}</td>
+            `;
+            body.appendChild(tr);
+        });
+    }
+
+    async function rebuildBlocks() {
+        const streamId = document.getElementById("sbStreamSelect").value;
+        const dateVal = document.getElementById("sbDateInput").value;
+        if (!streamId || !dateVal) {
+            setStatus("Select both station and date.", "warning");
+            return;
+        }
+        setStatus("Rebuilding speech blocks...");
+        try {
+            const resp = await fetch(`/api/stations/${streamId}/speech-blocks/rebuild`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ date: dateVal })
+            });
+            if (!resp.ok) {
+                const msg = await resp.text();
+                throw new Error(msg || "rebuild failed");
+            }
+            await loadBlocks();
+        } catch (err) {
+            console.error(err);
+            setStatus("Failed to rebuild speech blocks.", "danger");
+        }
+    }
+</script>
+{% endblock %}
