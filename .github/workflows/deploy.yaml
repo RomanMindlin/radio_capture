@@ -1,0 +1,31 @@
+
+name: Deploy to remote server
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy on server via SSH
+        uses: appleboy/ssh-action@v1.2.4
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SEHEL_SSH_KEY }}
+          script: |
+            cd /home/mindlin/radio_capture
+            git pull || true
+            docker rm -f radio-capture || true
+            docker image prune -f
+            docker compose -f docker-compose.yaml up -d --build

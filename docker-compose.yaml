@@ -1,0 +1,13 @@
+services:
+  radio:
+    build: .
+    container_name: radio-capture
+    restart: unless-stopped
+    environment:
+      - SECRET_KEY
+      - DATA_DIR
+      - DATABASE_URL
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
