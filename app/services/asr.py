@@ -81,6 +81,7 @@ def transcribe(file_path: str, model: str = "tiny", language: str = "he") -> dic
     Returns:
         {
             "transcript": str,  # Full transcription
+            "processing_time": float,  # Seconds spent on ASR
             "segments": [       # Segment-level timestamps
                 {
                     "start": "00:00:05.12",
@@ -162,6 +163,7 @@ def transcribe(file_path: str, model: str = "tiny", language: str = "he") -> dic
         
         return {
             "transcript": transcript,
+            "processing_time": processing_time,
             "segments": segments,
             "model": f"whisper-{model}",
             "confidence": overall_confidence

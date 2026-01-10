@@ -149,10 +149,16 @@ class RecordingWatcher:
                 with Session(engine) as session:
                     recording = session.get(Recording, recording_id)
                     if recording:
+                        processing_time = result.get("processing_time")
                         recording.transcript = result["transcript"]
-                        recording.transcript_json = {"segments": result["segments"]}
+                        transcript_payload = {"segments": result["segments"]}
+                        if processing_time is not None:
+                            transcript_payload["processing_time"] = processing_time
+
+                        recording.transcript_json = transcript_payload
                         recording.asr_model = result["model"]
                         recording.asr_confidence = result["confidence"]
+                        recording.asr_processing_seconds = processing_time
                         recording.asr_ts = datetime.utcnow()
                         session.add(recording)
                         session.commit()

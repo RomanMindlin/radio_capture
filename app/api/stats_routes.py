@@ -75,7 +75,8 @@ async def list_files(
             "transcript": r.transcript,
             "transcript_json": r.transcript_json,
             "asr_model": r.asr_model,
-            "asr_confidence": r.asr_confidence
+            "asr_confidence": r.asr_confidence,
+            "asr_processing_seconds": r.asr_processing_seconds
         })
     
     return response_data
@@ -211,6 +212,6 @@ async def get_transcription(
         "transcript": recording.transcript,
         "segments": recording.transcript_json.get("segments", []) if recording.transcript_json else [],
         "model": recording.asr_model,
-        "confidence": recording.asr_confidence or 0.0
+        "confidence": recording.asr_confidence or 0.0,
+        "processing_time": recording.asr_processing_seconds
     }
-
