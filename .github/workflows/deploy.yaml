@@ -21,8 +21,9 @@ jobs:
       
       - name: Set environment variables
         run: |
-          echo "IMAGE_NAME=ghcr.io/$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')/radio-capture:latest" >> $GITHUB_ENV
-          echo "GHCR_USERNAME=${{ github.repository_owner }}" >> $GITHUB_ENV
+          OWNER_LOWER="$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')"
+          echo "IMAGE_NAME=ghcr.io/${OWNER_LOWER}/radio-capture:latest" >> $GITHUB_ENV
+          echo "GHCR_USERNAME=${OWNER_LOWER}" >> $GITHUB_ENV
           echo "GHCR_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
 
       - name: Set up QEMU
@@ -62,5 +63,4 @@ jobs:
             docker pull "$IMAGE_NAME"
             docker rm -f radio-capture || true
             docker image prune -f
-            IMAGE_NAME="$IMAGE_NAME" docker compose -f docker-compose.yaml pull
-            IMAGE_NAME="$IMAGE_NAME" docker compose -f docker-compose.yaml up -d --no-build
+            IMAGE_NAME="$IMAGE_NAME" docker compose -f docker-compose.yaml up -d --no-build --pull never
