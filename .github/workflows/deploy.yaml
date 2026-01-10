@@ -62,4 +62,5 @@ jobs:
             docker pull "$IMAGE_NAME"
             docker rm -f radio-capture || true
             docker image prune -f
-            IMAGE=$IMAGE_NAME docker compose -f docker-compose.yaml up -d
+            IMAGE_NAME="$IMAGE_NAME" docker compose -f docker-compose.yaml pull
+            IMAGE_NAME="$IMAGE_NAME" docker compose -f docker-compose.yaml up -d --no-build
