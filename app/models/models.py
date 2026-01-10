@@ -56,6 +56,7 @@ class Recording(SQLModel, table=True):
     asr_model: Optional[str] = Field(default=None)
     asr_confidence: Optional[float] = Field(default=None)
     asr_ts: Optional[datetime] = None
+    asr_processing_seconds: Optional[float] = Field(default=None)
 
     stream: Optional[Stream] = Relationship(back_populates="recordings")
 

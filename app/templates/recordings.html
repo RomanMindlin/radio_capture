@@ -168,14 +168,23 @@
         `;
 
         // Add metadata if available
-        if (transcriptionData.asr_model) {
+        const hasConfidence = Number.isFinite(transcriptionData.asr_confidence);
+        const hasProcessingTime = Number.isFinite(transcriptionData.asr_processing_seconds);
+        const hasModel = Boolean(transcriptionData.asr_model);
+
+        if (hasModel || hasConfidence || hasProcessingTime) {
+            const confidenceText = hasConfidence ? `${(transcriptionData.asr_confidence * 100).toFixed(1)}%` : '—';
+            const processingText = hasProcessingTime ? `${transcriptionData.asr_processing_seconds.toFixed(1)}s` : '—';
             html += `
                 <div class="row mb-3">
-                    <div class="col-md-6">
-                        <small class="text-muted">Model:</small> <strong>${transcriptionData.asr_model}</strong>
+                    <div class="col-md-4">
+                        <small class="text-muted">Model:</small> <strong>${transcriptionData.asr_model || '—'}</strong>
                     </div>
-                    <div class="col-md-6">
-                        <small class="text-muted">Confidence:</small> <strong>${((transcriptionData.asr_confidence || 0) * 100).toFixed(1)}%</strong>
+                    <div class="col-md-4">
+                        <small class="text-muted">Confidence:</small> <strong>${confidenceText}</strong>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted">ASR time:</small> <strong>${processingText}</strong>
                     </div>
                 </div>
             `;
@@ -257,6 +266,7 @@
                 transcript: f.transcript,
                 asr_model: f.asr_model,
                 asr_confidence: f.asr_confidence,
+                asr_processing_seconds: f.asr_processing_seconds ?? f.transcript_json?.processing_time ?? null,
                 segments: f.transcript_json?.segments || []
             } : null;
 
