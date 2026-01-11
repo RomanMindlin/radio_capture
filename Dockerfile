@@ -10,13 +10,6 @@ RUN apt-get update && apt-get install -y \
     wget \
     pkg-config \
     build-essential \
-    libavformat-dev \
-    libavcodec-dev \
-    libavdevice-dev \
-    libavutil-dev \
-    libavfilter-dev \
-    libswscale-dev \
-    libswresample-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
