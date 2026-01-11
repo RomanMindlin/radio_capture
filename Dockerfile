@@ -3,10 +3,13 @@ FROM python:3.11-slim
 # Install system dependencies
 # ffmpeg is required for audio capture
 # curl/wget for healthchecks and model downloads
+# Build deps for faster-whisper / PyAV need pkg-config + compiler toolchain
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
     wget \
+    pkg-config \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
