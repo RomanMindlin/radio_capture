@@ -69,7 +69,7 @@ def _format_timestamp(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:06.2f}"
 
 
-def transcribe(file_path: str, model: str = "small", language: str = "he") -> dict:
+def transcribe(file_path: str, model: str = "tiny", language: str = "he") -> dict:
     """
     Transcribe audio file using OpenAI Whisper.
     

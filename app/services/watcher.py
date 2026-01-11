@@ -141,7 +141,7 @@ class RecordingWatcher:
                     self._executor,
                     transcribe,
                     file_path,
-                    "tiny",
+                    "small",
                     language
                 )
                 
