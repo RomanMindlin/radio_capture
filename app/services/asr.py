@@ -10,6 +10,7 @@ from typing import Optional
 
 import librosa
 import numpy as np
+import torch
 import whisper
 
 logger = logging.getLogger(__name__)
@@ -40,9 +41,17 @@ def _load_model(model_name: str = "tiny"):
             
             # Whisper uses XDG_CACHE_HOME or TORCH_HOME for model cache
             os.environ['XDG_CACHE_HOME'] = cache_dir
+
+            target_device = os.environ.get("WHISPER_DEVICE")
+            if target_device is None:
+                target_device = "cuda" if torch.cuda.is_available() else "cpu"
             
             logger.info(f"Using Whisper cache directory: {cache_dir}")
-            _whisper_model = whisper.load_model(model_name, download_root=cache_dir)
+            _whisper_model = whisper.load_model(
+                model_name, 
+                download_root=cache_dir, 
+                device=target_device
+                )
             _current_model_name = model_name
             logger.info(f"Whisper model {model_name} loaded successfully")
         except Exception as e:
