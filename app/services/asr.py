@@ -1,17 +1,16 @@
 """
-ASR (Automatic Speech Recognition) service using OpenAI Whisper.
+ASR (Automatic Speech Recognition) service using faster-whisper.
 Transcribes Hebrew audio files and returns structured results with timestamps.
 """
 import logging
 import os
 import time
 from datetime import timedelta
-from typing import Optional
 
 import librosa
 import numpy as np
 import torch
-import whisper
+from faster_whisper import WhisperModel
 
 logger = logging.getLogger(__name__)
 
@@ -41,17 +40,24 @@ def _load_model(model_name: str = "tiny"):
             
             # Whisper uses XDG_CACHE_HOME or TORCH_HOME for model cache
             os.environ['XDG_CACHE_HOME'] = cache_dir
+            os.environ['HF_HOME'] = cache_dir
 
             target_device = os.environ.get("WHISPER_DEVICE")
             if target_device is None:
                 target_device = "cuda" if torch.cuda.is_available() else "cpu"
+
+            compute_type = os.environ.get(
+                "WHISPER_COMPUTE_TYPE",
+                "float16" if target_device == "cuda" else "int8"
+            )
             
             logger.info(f"Using Whisper cache directory: {cache_dir}")
-            _whisper_model = whisper.load_model(
-                model_name, 
-                download_root=cache_dir, 
-                device=target_device
-                )
+            _whisper_model = WhisperModel(
+                model_name,
+                device=target_device,
+                compute_type=compute_type,
+                download_root=cache_dir,
+            )
             _current_model_name = model_name
             logger.info(f"Whisper model {model_name} loaded successfully")
         except Exception as e:
@@ -80,7 +86,7 @@ def _format_timestamp(seconds: float) -> str:
 
 def transcribe(file_path: str, model: str = "tiny", language: str = "he") -> dict:
     """
-    Transcribe audio file using OpenAI Whisper.
+    Transcribe audio file using faster-whisper.
     
     Args:
         file_path: Path to audio file
@@ -99,7 +105,7 @@ def transcribe(file_path: str, model: str = "tiny", language: str = "he") -> dic
                     "text": "..."
                 }
             ],
-            "model": "whisper-small",
+            "model": "faster-whisper-small",
             "confidence": 0.87
         }
     
@@ -123,37 +129,36 @@ def transcribe(file_path: str, model: str = "tiny", language: str = "he") -> dic
         audio, sr = librosa.load(file_path, sr=16000, mono=True)
         logger.info(f"Audio loaded: duration={len(audio)/sr:.2f}s, sr={sr}")
         
-        # Run Whisper transcription
-        # Use configured language for transcription
+        # Run Whisper transcription (faster-whisper)
         logger.info(f"Running Whisper transcription with language={language}...")
-        result = whisper_model.transcribe(
+        segments_iterator, _ = whisper_model.transcribe(
             audio,
             language=language,
             task="transcribe",
-            verbose=False,
-            fp16=False  # Disable fp16 for CPU compatibility
         )
         
         # Extract segments with timestamps
         segments = []
         confidences = []
+        transcript_parts = []
         
-        for seg in result.get("segments", []):
+        for seg in segments_iterator:
             segment_data = {
-                "start": _format_timestamp(seg["start"]),
-                "end": _format_timestamp(seg["end"]),
+                "start": _format_timestamp(seg.start),
+                "end": _format_timestamp(seg.end),
                 "speaker": None,  # No diarization
-                "text": seg["text"].strip()
+                "text": seg.text.strip()
             }
             segments.append(segment_data)
+            transcript_parts.append(seg.text.strip())
             
             # Collect confidence scores (if available)
             # Whisper doesn't always provide per-segment confidence,
             # but we can use the average log probability as a proxy
-            if "avg_logprob" in seg:
+            if getattr(seg, "avg_logprob", None) is not None:
                 # Convert log probability to approximate confidence (0-1)
                 # avg_logprob typically ranges from -1 to 0
-                confidence = np.exp(seg["avg_logprob"])
+                confidence = np.exp(seg.avg_logprob)
                 confidences.append(confidence)
         
         # Calculate overall confidence
@@ -164,7 +169,7 @@ def transcribe(file_path: str, model: str = "tiny", language: str = "he") -> dic
             overall_confidence = 0.85
         
         # Get full transcript
-        transcript = result.get("text", "").strip()
+        transcript = "".join(transcript_parts).strip()
         
         processing_time = time.time() - start_time
         logger.info(f"Transcription completed in {processing_time:.2f}s")
@@ -174,7 +179,7 @@ def transcribe(file_path: str, model: str = "tiny", language: str = "he") -> dic
             "transcript": transcript,
             "processing_time": processing_time,
             "segments": segments,
-            "model": f"whisper-{model}",
+            "model": f"faster-whisper-{model}",
             "confidence": overall_confidence
         }
         
