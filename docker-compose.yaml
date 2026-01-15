@@ -17,6 +17,8 @@ services:
     restart: unless-stopped
     environment:
       - DATABASE_URL
+      - HOME=/data
+      - PANNS_CACHE_DIR=/data/models/panns
     command: ./start_watcher.sh
     deploy:
       resources:

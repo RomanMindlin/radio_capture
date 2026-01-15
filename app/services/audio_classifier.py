@@ -32,13 +32,21 @@ def _get_model():
             cache_dir = os.environ.get('PANNS_CACHE_DIR', '/data/models/panns')
             os.makedirs(cache_dir, exist_ok=True)
             
-            # Set torch hub cache to persistent location
-            torch.hub.set_dir(cache_dir)
+            # Path to the checkpoint file in persistent volume
+            checkpoint_path = os.path.join(cache_dir, 'Cnn14_mAP=0.431.pth')
+            
+            # Download model if it doesn't exist or is too small (incomplete download)
+            if not os.path.exists(checkpoint_path) or os.path.getsize(checkpoint_path) < 3e8:
+                logger.info(f"Downloading PANNs CNN14 model to {checkpoint_path}...")
+                zenodo_url = 'https://zenodo.org/record/3987831/files/Cnn14_mAP%3D0.431.pth?download=1'
+                import subprocess
+                subprocess.run(['wget', '-O', checkpoint_path, zenodo_url], check=True)
+                logger.info("Model downloaded successfully")
             
             from panns_inference import AudioTagging
             
-            logger.info(f"Loading PANNs CNN14 model (cache dir: {cache_dir})...")
-            _model = AudioTagging(checkpoint_path=None, device='cpu')
+            logger.info(f"Loading PANNs CNN14 model from {checkpoint_path}...")
+            _model = AudioTagging(checkpoint_path=checkpoint_path, device='cuda' if torch.cuda.is_available() else 'cpu')
             
             # AudioSet class labels that we'll use for classification
             # These are indices in the AudioSet ontology
