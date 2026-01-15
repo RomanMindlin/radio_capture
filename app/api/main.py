@@ -11,7 +11,6 @@ from app.api.auth import get_password_hash
 from app.core.db import create_db_and_tables, engine, get_session
 from app.models.models import User, UserRole
 from app.services.stream_manager import manager
-from app.services.watcher import watcher
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -44,7 +43,6 @@ async def on_startup():
             session.commit()
     
     await manager.start()
-    await watcher.start()
 
 @app.on_event("shutdown")
 async def on_shutdown():

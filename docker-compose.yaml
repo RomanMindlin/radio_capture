@@ -17,3 +17,23 @@ services:
               capabilities: [gpu]
     volumes:
       - ${DATA_DIR:-./data}:/data
+
+  watcher:
+    image: ${IMAGE_NAME:-radio-capture:latest}
+    container_name: radio-capture-watcher
+    restart: unless-stopped
+    environment:
+      - SECRET_KEY
+      - DATABASE_URL
+    command: ./start_watcher.sh
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ${DATA_DIR:-./data}:/data
+    depends_on:
+      - radio
