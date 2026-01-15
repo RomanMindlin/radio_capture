@@ -26,8 +26,8 @@ COPY . .
 # Set environment variables
 ENV PYTHONPATH=/app
 
-# Make entrypoint executable
-RUN chmod +x start.sh
+# Make entrypoint scripts executable
+RUN chmod +x start.sh start_watcher.sh
 
 # Expose port
 EXPOSE 8000
