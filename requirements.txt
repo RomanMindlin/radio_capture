@@ -12,6 +12,7 @@ aiofiles
 pydantic-settings
 psutil
 requests
+aiogram==3.15.0
 # Audio classification dependencies
 torch==2.0.0
 panns-inference==0.1.1
