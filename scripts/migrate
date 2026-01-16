@@ -1,2 +1,0 @@
-#!/bin/bash
-docker exec radio-service alembic upgrade head

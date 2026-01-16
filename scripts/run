@@ -1,2 +1,0 @@
-#!/bin/bash
-docker run -d -p 8000:8000 -v $(pwd)/data:/data --name radio-service radio-capture
