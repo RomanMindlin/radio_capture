@@ -1,0 +1,17 @@
+{
+  "cron": "0 12 * * *",
+  "channels": [
+    {
+      "telegram_bot_token": "YOUR_BOT_TOKEN_1",
+      "telegram_channel_id": "@channel_id_1",
+      "timezone": "Asia/Jerusalem",
+      "target_language": "he"
+    },
+    {
+      "telegram_bot_token": "YOUR_BOT_TOKEN_2",
+      "telegram_channel_id": "@channel_id_2",
+      "timezone": "Europe/Berlin",
+      "target_language": "de"
+    }
+  ]
+}

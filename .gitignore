@@ -58,3 +58,5 @@ data/
 
 # Pycharm
 .idea/
+
+channels.json
