@@ -3,10 +3,12 @@ FROM python:3.11-slim
 # Install system dependencies
 # ffmpeg is required for audio capture
 # curl/wget for healthchecks and model downloads
+# cron is required for scheduled tasks
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
     wget \
+    cron \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
