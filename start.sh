@@ -41,8 +41,8 @@ PY
     )
     
     if [ -z "${CRON_SCHEDULE}" ]; then
-        echo "Warning: No cron schedule found in config, using default (0 6 * * *)"
-        CRON_SCHEDULE="0 6 * * *"
+        echo "Error: No cron schedule found in ${CONFIG_PATH}. Please add a 'cron' field to the configuration." >&2
+        exit 1
     fi
     
     echo "Cron schedule: ${CRON_SCHEDULE}"
