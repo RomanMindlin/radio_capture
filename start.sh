@@ -2,7 +2,7 @@
 # Configure cron based on channels.json and start the application
 set -eu
 
-CONFIG_PATH=${CONFIG_PATH:-/app/channels.json}
+CONFIG_PATH=${CONFIG_PATH:-/config/channels.json}
 PYTHON_BIN=${PYTHON_BIN:-python}
 CRON_FILE=/etc/cron.d/radio-summary
 LOG_TARGET=${CRON_LOG_TARGET:-/proc/1/fd/1}
