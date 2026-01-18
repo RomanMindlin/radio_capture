@@ -55,7 +55,7 @@ PY
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 PYTHONPATH=/app
-DATABASE_URL=${DATABASE_URL:-sqlite:////data/database/radio.db}
+DATABASE_URL=${DATABASE_URL:-sqlite:////data/database.sqlite}
 OPENAI_API_KEY=${OPENAI_API_KEY}
 
 ${CRON_SCHEDULE} root ${COMMAND}
