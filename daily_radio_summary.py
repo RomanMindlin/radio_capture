@@ -139,7 +139,7 @@ def fetch_recordings_for_stream(
         select(Recording)
         .where(Recording.stream_id == stream_id)
         .where(Recording.classification == "speech")
-        .where(Recording.transcript_json.is_not(None))
+        .where(Recording.transcript.is_not(None))
         .where(Recording.start_ts >= start_utc)
         .where(Recording.start_ts <= end_utc)
         .order_by(Recording.start_ts)
@@ -218,28 +218,7 @@ def build_llm_prompt_for_stream(
         '- The root object contains a single key: "segments".',
         '- "segments" is an array of speech segments in chronological order.',
         "",
-        "Each segment represents a continuous fragment of spoken audio and contains:",
-        "",
-        '- "start":',
-        "  - String timestamp indicating when the segment starts in the audio.",
-        "  - Format is HH:MM:SS.milliseconds.",
-        "  - The timestamp is informational and should not be mentioned or used explicitly.",
-        "",
-        '- "end":',
-        "  - String timestamp indicating when the segment ends.",
-        '  - Same format as "start".',
-        "  - Also informational only.",
-        "",
-        '- "speaker":',
-        "  - Identifier of the speaker if available.",
-        "  - May be null when speaker diarization is not present or uncertain.",
-        "  - Speaker identity is not important for the task unless it helps infer dialogue flow.",
-        "",
-        '- "text":',
-        "  - The transcribed spoken content of the segment.",
-        "  - Text may be in original language, depending on the radio station.",
-        "  - Text may contain conversational speech, interruptions, repetitions, filler words, or truncated sentences.",
-        "  - Some text may be noisy or incomplete due to radio conditions.",
+        "Each segment represents a continuous fragment of spoken audio.",
         "",
         "Important notes for interpretation:",
         "",
@@ -376,8 +355,8 @@ async def main():
             
             logger.info(f"  Found {len(recordings)} recordings")
             
-            # Extract transcript_json from recordings
-            transcriptions = [r.transcript_json for r in recordings]
+            # Extract transcript from recordings
+            transcriptions = [r.transcript for r in recordings]
             
             # Build prompt for this stream
             prompt = build_llm_prompt_for_stream(
