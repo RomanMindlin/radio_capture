@@ -201,9 +201,8 @@ def build_llm_prompt_for_stream(
         "- Identify 3-5 main topics discussed during the day",
         "- For each topic, capture key points and insights",
         "- Write ONE coherent item summarizing one topic",
-        "- Combine items into a single paragraph summary",
         "- Use clear and concise language",
-        "- Highlight radio station name"
+        "- Highlight radio station name (use markdown bold)",
         f"- Write the summary ONLY in {target_language}",
         "",
         "Topics may include:",
@@ -232,7 +231,7 @@ def build_llm_prompt_for_stream(
         "- Focus on understanding the semantic content and topics discussed across all segments.",
         "- The transcription reflects real radio speech and may include informal language, overlaps, or unfinished thoughts.",
         "- Do NOT invent facts. If uncertain, keep it generic and lower confidence."
-        "- If two adjacent parts are the same segment type and topic, keep them as ONE segment (do not over-split"
+        "- If two adjacent parts are the same segment type and topic, keep them as ONE segment (do not over-split)"
         "",
         "===== TRANSCRIPTION DATA =====",
         ""
@@ -310,7 +309,7 @@ async def post_to_telegram(text: str, channel_id: str, bot_token: str) -> None:
     bot = Bot(token=bot_token)
     
     try:
-        await bot.send_message(chat_id=channel_id, text=text)
+        await bot.send_message(chat_id=channel_id, text=text, parse_mode="Markdown")
         logger.info("Successfully posted to Telegram")
     except Exception as e:
         logger.error(f"Telegram API request failed: {e}")
