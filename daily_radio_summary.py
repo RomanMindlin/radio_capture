@@ -202,7 +202,6 @@ def build_llm_prompt_for_stream(
         "- For each topic, capture key points and insights",
         "- Write ONE coherent item summarizing one topic",
         "- Use clear and concise language",
-        "- Highlight radio station name (use markdown bold)",
         f"- Write the summary ONLY in {target_language}",
         "",
         "Topics may include:",
@@ -390,7 +389,7 @@ async def main():
     message_parts = [get_summary_intro(args.target_language), ""]
     
     for item in stream_summaries:
-        message_parts.append(f"{item['name']} — {item['summary']}")
+        message_parts.append(f"*{item['name']}* — {item['summary']}")
         message_parts.append("")
     
     final_message = "\n".join(message_parts).strip()
