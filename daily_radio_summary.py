@@ -201,6 +201,7 @@ def build_llm_prompt_for_stream(
         "- Identify 3-5 main topics discussed during the day",
         "- For each topic, capture key points and insights",
         "- Write ONE coherent item summarizing one topic",
+        "- Write each topic as a separate paragraph",
         "- Use clear and concise language",
         f"- Write the summary ONLY in {target_language}",
         "",
