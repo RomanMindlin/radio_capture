@@ -247,6 +247,8 @@ def build_llm_prompt_for_stream(
         "- Do not rely on timestamps or speaker fields for output.",
         "- Focus on understanding the semantic content and topics discussed across all segments.",
         "- The transcription reflects real radio speech and may include informal language, overlaps, or unfinished thoughts.",
+        "- Do NOT invent facts. If uncertain, keep it generic and lower confidence."
+        "- If two adjacent parts are the same segment type and topic, keep them as ONE segment (do not over-split"
         "",
         "===== TRANSCRIPTION DATA =====",
         ""
