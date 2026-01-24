@@ -30,6 +30,28 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+SUMMARY_INTRO_BY_LANGUAGE = {
+    "en": "What people talked about on the radio today.",
+    "he": "על מה אנשים דיברו ברדיו היום.",
+    "de": "Worüber die Leute heute im Radio gesprochen haben.",
+    "it": "Di cosa hanno parlato le persone alla radio oggi.",
+    "sp": "De qué habló la gente en la radio hoy.",
+    "fr": "De quoi les gens ont parlé à la radio aujourd'hui.",
+    "ru": "О чем люди говорили по радио сегодня.",
+}
+
+
+def get_summary_intro(target_language: str) -> str:
+    """Return localized intro line for the final Telegram message."""
+    intro = SUMMARY_INTRO_BY_LANGUAGE.get(target_language)
+    if intro:
+        return intro
+    logger.warning(
+        "Unsupported target language '%s' for intro; falling back to English",
+        target_language,
+    )
+    return SUMMARY_INTRO_BY_LANGUAGE["en"]
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments."""
@@ -177,7 +199,11 @@ def build_llm_prompt_for_stream(
         "",
         "Task:",
         "- Identify 3-5 main topics discussed during the day",
-        "- Write ONE coherent paragraph summarizing these topics",
+        "- For each topic, capture key points and insights",
+        "- Write ONE coherent item summarizing one topic",
+        "- Combine items into a single paragraph summary",
+        "- Use clear and concise language",
+        "- Highlight radio station name"
         f"- Write the summary ONLY in {target_language}",
         "",
         "Topics may include:",
@@ -199,29 +225,8 @@ def build_llm_prompt_for_stream(
         "",
         "===== TRANSCRIPTION DATA FORMAT =====",
         "",
-        "The transcription data is provided as a JSON object with the following structure:",
-        "",
-        "{",
-        '  "segments": [',
-        "    {",
-        '      "start": "<string timestamp>",',
-        '      "end": "<string timestamp>",',
-        '      "speaker": "<speaker identifier or null>",',
-        '      "text": "<spoken text>"',
-        "    },",
-        "    ...",
-        "  ]",
-        "}",
-        "",
-        "Details:",
-        "",
-        '- The root object contains a single key: "segments".',
-        '- "segments" is an array of speech segments in chronological order.',
-        "",
         "Each segment represents a continuous fragment of spoken audio.",
-        "",
         "Important notes for interpretation:",
-        "",
         "- Segments should be read sequentially to reconstruct the meaning of the broadcast.",
         "- Do not rely on timestamps or speaker fields for output.",
         "- Focus on understanding the semantic content and topics discussed across all segments.",
@@ -260,14 +265,13 @@ def call_openai(prompt: str) -> str:
     }
     
     payload = {
-        "model": "gpt-4o-mini",
+        "model": "gpt-5-mini",
         "messages": [
             {
                 "role": "user",
                 "content": prompt
             }
-        ],
-        "temperature": 0.3
+        ]
     }
     
     logger.info("Calling OpenAI API...")
@@ -384,7 +388,7 @@ async def main():
         sys.exit(0)
     
     # Build final message
-    message_parts = ["What people talked about on the radio today.", ""]
+    message_parts = [get_summary_intro(args.target_language), ""]
     
     for item in stream_summaries:
         message_parts.append(f"{item['name']} — {item['summary']}")
