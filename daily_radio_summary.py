@@ -220,7 +220,7 @@ def build_llm_prompt_for_stream(
         "- Recognition process",
         "",
         "Output format:",
-        "Return ONLY a single paragraph summary. No heading, no station name, just the summary paragraph.",
+        "Return ONLY the summary paragraphs (one paragraph per topic). Separate each paragraph with a blank line. No heading, no station name, just the summary paragraphs.",
         "",
         "===== TRANSCRIPTION DATA FORMAT =====",
         "",
