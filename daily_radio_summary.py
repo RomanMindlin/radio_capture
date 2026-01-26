@@ -386,17 +386,22 @@ async def main():
         logger.info("Exiting without sending Telegram message")
         sys.exit(0)
     
-    # Build final message
-    message_parts = [get_summary_intro(args.target_language), ""]
+    # Send first message with intro and first station
+    first_message_parts = [
+        get_summary_intro(args.target_language),
+        "",
+        f"*{stream_summaries[0]['name']}* — {stream_summaries[0]['summary']}"
+    ]
+    first_message = "\n".join(first_message_parts)
     
-    for item in stream_summaries:
-        message_parts.append(f"*{item['name']}* — {item['summary']}")
-        message_parts.append("")
+    await post_to_telegram(first_message, args.telegram_channel_id, args.telegram_bot_token)
+    logger.info("Posted first message with intro and first station")
     
-    final_message = "\n".join(message_parts).strip()
-    
-    # Post to Telegram
-    await post_to_telegram(final_message, args.telegram_channel_id, args.telegram_bot_token)
+    # Send remaining stations as separate messages
+    for item in stream_summaries[1:]:
+        message = f"*{item['name']}* — {item['summary']}"
+        await post_to_telegram(message, args.telegram_channel_id, args.telegram_bot_token)
+        logger.info(f"Posted message for {item['name']}")
     
     logger.info("=== Script completed successfully ===")
 
