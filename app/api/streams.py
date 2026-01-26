@@ -28,6 +28,9 @@ def create_stream(stream: Stream, session: Session = Depends(get_session), curre
     if existing:
         raise HTTPException(status_code=400, detail="Stream name already exists")
     
+    # Strip whitespace from URL
+    stream.url = stream.url.strip()
+    
     session.add(stream)
     session.commit()
     session.refresh(stream)
@@ -40,7 +43,7 @@ async def update_stream(stream_id: int, stream_data: Stream, session: Session = 
         raise HTTPException(status_code=404, detail="Stream not found")
     
     db_stream.name = stream_data.name
-    db_stream.url = stream_data.url
+    db_stream.url = stream_data.url.strip()
     db_stream.mandatory_params = stream_data.mandatory_params
     db_stream.optional_params = stream_data.optional_params
     db_stream.enabled = stream_data.enabled
