@@ -204,6 +204,8 @@ def build_llm_prompt_for_stream(
         "- Write each topic as a separate paragraph",
         "- Use clear and concise language",
         f"- Write the summary ONLY in {target_language}",
+        "- CRITICAL: Keep the ENTIRE summary under 4000 characters total",
+        "- Be concise - prioritize the most important topics if needed to stay within the character limit",
         "",
         "Topics may include:",
         "- News and current events",
