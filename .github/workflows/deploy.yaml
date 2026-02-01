@@ -26,6 +26,7 @@ jobs:
           echo "GHCR_USERNAME=${OWNER_LOWER}" >> $GITHUB_ENV
           echo "GHCR_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> $GITHUB_ENV
+          echo "ENABLE_RADIO_LOGS=${{ vars.ENABLE_RADIO_LOGS || 'false' }}" >> $GITHUB_ENV
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -56,7 +57,7 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SEHEL_SSH_KEY }}
-          envs: IMAGE_NAME,GHCR_USERNAME,GHCR_TOKEN,OPENAI_API_KEY
+          envs: IMAGE_NAME,GHCR_USERNAME,GHCR_TOKEN,OPENAI_API_KEY,ENABLE_RADIO_LOGS
           script: |
             cd /home/mindlin/radio_capture
             git pull || true
@@ -64,4 +65,4 @@ jobs:
             docker pull "$IMAGE_NAME"
             docker rm -f radio-capture || true
             docker image prune -f
-            IMAGE_NAME="$IMAGE_NAME" OPENAI_API_KEY="$OPENAI_API_KEY" docker compose -f docker-compose.yaml up -d --no-build --pull never
+            IMAGE_NAME="$IMAGE_NAME" OPENAI_API_KEY="$OPENAI_API_KEY" ENABLE_RADIO_LOGS="$ENABLE_RADIO_LOGS" docker compose -f docker-compose.yaml up -d --no-build --pull never

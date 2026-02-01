@@ -64,6 +64,8 @@ docker run -d \
 - `SECRET_KEY`: JWT secret key (default: auto-generated, set in production)
 - `DATABASE_URL`: SQLite database path (default: `sqlite:////data/database.sqlite`)
 - `DATA_DIR`: Data directory path (default: `/data`)
+- `ENABLE_RADIO_LOGS`: Enable disk logging with rotation (default: `false`, set to `true` or `1` to enable)
+- `LOG_DIR`: Directory for log files (default: `/data/logs`)
 
 ### Stream Configuration
 
@@ -82,6 +84,34 @@ Streams are configured via the web UI with the following parameters:
 ### Recording Retention
 
 By default, each stream's recordings are purged after **3 days**, but you can override the retention window per stream through the `retention_days` optional parameter. Setting the value to `0` (or any non-positive number) disables automatic deletion for that stream. Deleted recordings have their database entries retained for historical/statistical use but are marked with a `deleted` status so they no longer appear in file listings or downloads. This keeps storage healthy without losing high-level metadata.
+
+### Logging Configuration
+
+The application supports persistent disk logging with automatic rotation:
+
+- **Enable disk logging**: Set `ENABLE_RADIO_LOGS=true` in your environment
+- **Log location**: Logs are written to `/data/logs/` directory (configurable via `LOG_DIR`)
+- **Rotation policy**: Logs rotate every 3 days, keeping 10 backup files (30 days of history)
+- **Log files**: 
+  - `radio_capture.api.log` - Main API server logs
+  - `radio_capture.watcher.log` - Watcher process logs
+  - `radio_capture.daily_summary.log` - Daily summary script logs
+  - `radio_capture.run_summaries.log` - Batch summary runner logs
+  - `stream_<id>_<name>.log` - Individual log file for each stream's ffmpeg process
+- **Console output**: Always enabled regardless of disk logging setting
+
+To enable logging in Docker Compose:
+```bash
+export ENABLE_RADIO_LOGS=true
+docker-compose up -d
+```
+
+Or add to your `.env` file:
+```
+ENABLE_RADIO_LOGS=true
+```
+
+Each active stream will have its own dedicated log file containing all ffmpeg output, making it easier to troubleshoot individual stream issues without searching through combined logs.
 
 ## Project Structure
 

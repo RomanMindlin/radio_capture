@@ -6,13 +6,10 @@ import asyncio
 import logging
 import sys
 
+from app.core.logging_config import setup_logging
 from app.services.watcher import watcher
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = setup_logging("radio_capture.watcher")
 
 
 async def main():

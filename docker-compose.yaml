@@ -7,6 +7,8 @@ services:
       - SECRET_KEY
       - DATABASE_URL
       - OPENAI_API_KEY
+      - ENABLE_RADIO_LOGS=${ENABLE_RADIO_LOGS:-false}
+      - LOG_DIR=/data/logs
     ports:
       - "8000:8000"
     volumes:
@@ -22,6 +24,8 @@ services:
       - OPENAI_API_KEY
       - HOME=/data
       - PANNS_CACHE_DIR=/data/models/panns
+      - ENABLE_RADIO_LOGS=${ENABLE_RADIO_LOGS:-false}
+      - LOG_DIR=/data/logs
     command: ./start_watcher.sh
     deploy:
       resources:

@@ -13,13 +13,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict
 
+from app.core.logging_config import setup_logging
+
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
-logger = logging.getLogger(__name__)
+logger = setup_logging("radio_capture.run_summaries")
 
 
 def parse_args() -> argparse.Namespace:

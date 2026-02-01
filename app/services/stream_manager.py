@@ -7,6 +7,7 @@ from typing import Dict, Optional
 from sqlmodel import Session, select
 
 from app.core.db import engine, get_session
+from app.core.logging_config import get_stream_logger
 from app.models.models import Event, Recording, Stream
 from app.services.ffmpeg_builder import FfmpegBuilder
 
@@ -16,6 +17,7 @@ class StreamManager:
     def __init__(self):
         self.processes: Dict[int, asyncio.subprocess.Process] = {}
         self.retry_counts: Dict[int, int] = {}
+        self.stream_loggers: Dict[int, logging.Logger] = {}  # Store stream-specific loggers
         self.running = False
         self._lock = asyncio.Lock()
 
@@ -110,6 +112,11 @@ class StreamManager:
 
     async def start_stream(self, stream: Stream, session: Session):
         logger.info(f"Starting stream: {stream.name}")
+        
+        # Create stream-specific logger
+        stream_logger = get_stream_logger(stream.name, stream.id)
+        self.stream_loggers[stream.id] = stream_logger
+        
         try:
             # Ensure output dir exists (at least the root)
             os.makedirs(f"/data/recordings/{stream.name}", exist_ok=True)
@@ -118,7 +125,8 @@ class StreamManager:
             builder = FfmpegBuilder(stream.dict())
             cmd = builder.build_command()
             
-            logger.info(f"Command for {stream.name}: {' '.join(cmd)}")
+            stream_logger.info(f"Starting ffmpeg for stream: {stream.name}")
+            stream_logger.info(f"Command: {' '.join(cmd)}")
 
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -142,7 +150,7 @@ class StreamManager:
             asyncio.create_task(self.monitor_output(stream.id, proc))
 
         except Exception as e:
-            logger.error(f"Failed to start {stream.name}: {e}")
+            stream_logger.error(f"Failed to start stream {stream.name}: {e}")
             stream.current_status = "error"
             stream.last_error = str(e)
             session.add(stream)
@@ -159,6 +167,12 @@ class StreamManager:
                     proc.kill()
             del self.processes[stream_id]
             
+            # Clean up stream logger
+            if stream_id in self.stream_loggers:
+                stream_logger = self.stream_loggers[stream_id]
+                stream_logger.info(f"Stream {stream_id} stopped")
+                del self.stream_loggers[stream_id]
+            
             # Update DB
             with Session(engine) as session:
                 stream = session.get(Stream, stream_id)
@@ -168,8 +182,16 @@ class StreamManager:
                     session.commit()
 
     async def handle_failure(self, stream: Stream, session: Session):
+        # Get stream logger if it exists
+        stream_logger = self.stream_loggers.get(stream.id, logger)
+        stream_logger.error(f"Stream {stream.name} (ID: {stream.id}) process died unexpectedly")
+        
         # Clean up process handle
         del self.processes[stream.id]
+        
+        # Clean up logger
+        if stream.id in self.stream_loggers:
+            del self.stream_loggers[stream.id]
         
         # Update Status
         stream.current_status = "error"
@@ -188,6 +210,9 @@ class StreamManager:
 
     async def monitor_output(self, stream_id: int, proc: asyncio.subprocess.Process):
         """Reads stderr/stdout to log events or detect issues."""
+        # Get the stream-specific logger
+        stream_logger = self.stream_loggers.get(stream_id, logger)
+        
         # ffmpeg logs to stderr mainly
         try:
             while True:
@@ -196,11 +221,16 @@ class StreamManager:
                     break
                 line_str = line.decode('utf-8', errors='ignore').strip()
                 if line_str:
-                    # We can parse specific ffmpeg messages here
-                    # For example "Opening '...'" or error codes
-                    # For now just debug log
-                    logger.info(f"[{stream_id}] {line_str}")
-        except Exception:
-            pass
+                    # Log ffmpeg output to stream-specific log file
+                    # Check log level based on ffmpeg output patterns
+                    line_lower = line_str.lower()
+                    if 'error' in line_lower or 'fatal' in line_lower:
+                        stream_logger.error(line_str)
+                    elif 'warning' in line_lower:
+                        stream_logger.warning(line_str)
+                    else:
+                        stream_logger.info(line_str)
+        except Exception as e:
+            stream_logger.error(f"Error monitoring output: {e}")
 
 manager = StreamManager()

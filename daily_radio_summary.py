@@ -20,15 +20,11 @@ from sqlmodel import Session, select
 
 # Import existing database setup
 from app.core.db import engine
+from app.core.logging_config import setup_logging
 from app.models.models import Recording, Stream
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
-logger = logging.getLogger(__name__)
+logger = setup_logging("radio_capture.daily_summary")
 
 SUMMARY_INTRO_BY_LANGUAGE = {
     "en": "What people talked about on the radio today.",
