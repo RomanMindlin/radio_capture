@@ -213,24 +213,46 @@ class StreamManager:
         # Get the stream-specific logger
         stream_logger = self.stream_loggers.get(stream_id, logger)
         
-        # ffmpeg logs to stderr mainly
+        # ffmpeg logs to stderr mainly. Use chunked reads rather than readline()
+        # because ffmpeg can emit very long lines without separators.
         try:
+            if proc.stderr is None:
+                return
+
+            buffer = b""
+            chunk_size = 4096
+
             while True:
-                line = await proc.stderr.readline()
-                if not line:
+                chunk = await proc.stderr.read(chunk_size)
+                if not chunk:
                     break
-                line_str = line.decode('utf-8', errors='ignore').strip()
-                if line_str:
-                    # Log ffmpeg output to stream-specific log file
-                    # Check log level based on ffmpeg output patterns
-                    line_lower = line_str.lower()
-                    if 'error' in line_lower or 'fatal' in line_lower:
-                        stream_logger.error(line_str)
-                    elif 'warning' in line_lower:
-                        stream_logger.warning(line_str)
-                    else:
-                        stream_logger.info(line_str)
+
+                buffer += chunk
+                lines = buffer.splitlines(keepends=True)
+                if lines and not lines[-1].endswith((b"\n", b"\r")):
+                    buffer = lines.pop()
+                else:
+                    buffer = b""
+
+                for raw_line in lines:
+                    self._log_stream_line(stream_logger, raw_line)
+
+            if buffer:
+                self._log_stream_line(stream_logger, buffer)
         except Exception as e:
             stream_logger.error(f"Error monitoring output: {e}")
+
+    def _log_stream_line(self, stream_logger: logging.Logger, raw_line: bytes):
+        line_str = raw_line.decode('utf-8', errors='ignore').strip()
+        if not line_str:
+            return
+
+        line_lower = line_str.lower()
+        if 'error' in line_lower or 'fatal' in line_lower:
+            stream_logger.error(line_str)
+        elif 'warning' in line_lower:
+            stream_logger.warning(line_str)
+        else:
+            stream_logger.info(line_str)
 
 manager = StreamManager()
