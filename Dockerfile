@@ -16,7 +16,8 @@ WORKDIR /app
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip "setuptools<81" wheel
+RUN pip install --no-cache-dir --no-build-isolation -r requirements.txt
 
 # Create necessary directories for data volume
 # These will be mapped to the external volume, but we ensure they exist in the image structure
