@@ -3,6 +3,12 @@ from typing import Any, Dict, List
 
 
 class FfmpegBuilder:
+    DEFAULT_CODECS = {
+        "wav": "pcm_s16le",
+        "mp3": "libmp3lame",
+        "aac": "aac",
+    }
+
     def __init__(self, stream_config: Dict[str, Any]):
         """
         stream_config expects:
@@ -41,8 +47,9 @@ class FfmpegBuilder:
         cmd.extend(["-segment_format", fmt])
 
         # Audio Codec & Bitrate
-        # Default to pcm_s16le for WAV, copy for others (legacy/mp3)
-        default_codec = "pcm_s16le" if fmt == "wav" else "copy"
+        # Default codec depends on target container/format.
+        # `copy` is not valid for MP3 output when source is AAC (common for HLS radio).
+        default_codec = self.DEFAULT_CODECS.get(fmt, "copy")
         codec = self.optional.get("codec", default_codec)
         
         cmd.extend(["-c:a", codec])
@@ -51,15 +58,12 @@ class FfmpegBuilder:
              cmd.extend(["-b:a", self.optional["bitrate"]])
 
         if codec != "copy":
-            # Channels
-            # Default to 1 (Mono)
-            channels = str(self.mandatory.get("channels", 1))
-            cmd.extend(["-ac", channels])
-                
-            # Sample Rate
-            # Default to 16000
-            sample_rate = str(self.mandatory.get("sample_rate", 16000))
-            cmd.extend(["-ar", sample_rate])
+            # Only set channel/sample-rate when explicitly configured.
+            # This avoids unexpected forced downsampling for transcoded streams.
+            if "channels" in self.mandatory and self.mandatory["channels"] is not None:
+                cmd.extend(["-ac", str(self.mandatory["channels"])])
+            if "sample_rate" in self.mandatory and self.mandatory["sample_rate"] is not None:
+                cmd.extend(["-ar", str(self.mandatory["sample_rate"])])
 
         # Segmentation
         cmd.extend(["-f", "segment"])
