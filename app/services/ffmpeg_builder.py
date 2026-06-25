@@ -32,8 +32,36 @@ class FfmpegBuilder:
         if not self.url or not self.name:
             raise ValueError("Stream URL and Name are required")
 
-        # Base command
-        cmd = ["ffmpeg", "-nostdin", "-y", "-loglevel", "info"]
+        # Loglevel — default verbose so HTTP request/response headers appear in
+        # logs (helps diagnose provider-side blocking or throttling).
+        # Override per-stream via optional_params.log_level, e.g. "info".
+        log_level = self.optional.get("log_level", "verbose")
+        cmd = ["ffmpeg", "-nostdin", "-y", "-loglevel", log_level]
+
+        url_scheme = (self.url or "").split("://")[0].lower()
+        if url_scheme in ("http", "https"):
+            # Reconnect so ffmpeg retries after brief source outages rather than
+            # hanging or exiting.
+            cmd.extend([
+                "-reconnect", "1",
+                "-reconnect_at_eof", "1",
+                "-reconnect_streamed", "1",
+                "-reconnect_delay_max", "30",
+                "-timeout", "30000000",   # 30 s in µs — prevents silent TCP hang
+            ])
+
+            # Custom User-Agent — many providers block the default "Lavf/X.Y.Z"
+            # fingerprint. Set optional_params.user_agent to a browser string to
+            # work around that.
+            user_agent = self.optional.get("user_agent", "")
+            if user_agent:
+                cmd.extend(["-user_agent", user_agent])
+
+            # Extra HTTP request headers, e.g. Referer.
+            # Format: "Referer: https://example.com\r\nX-Custom: value"
+            http_headers = self.optional.get("http_headers", "")
+            if http_headers:
+                cmd.extend(["-headers", http_headers])
 
         # Input
         cmd.extend(["-i", self.url])

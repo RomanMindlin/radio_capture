@@ -1,7 +1,8 @@
 import asyncio
 import logging
 import os
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 from typing import Dict, Optional
 
 from sqlmodel import Session, select
@@ -13,11 +14,18 @@ from app.services.ffmpeg_builder import FfmpegBuilder
 
 logger = logging.getLogger(__name__)
 
+# If no audio file has been modified for this long, treat the stream as stalled.
+_STALL_THRESHOLD_SECONDS = 300   # 5 minutes
+# Don't check for stalls during the first N seconds after a stream starts.
+_STALL_GRACE_SECONDS = 120
+
+
 class StreamManager:
     def __init__(self):
         self.processes: Dict[int, asyncio.subprocess.Process] = {}
         self.retry_counts: Dict[int, int] = {}
-        self.stream_loggers: Dict[int, logging.Logger] = {}  # Store stream-specific loggers
+        self.stream_loggers: Dict[int, logging.Logger] = {}
+        self.stream_start_times: Dict[int, float] = {}  # monotonic time of last start
         self.running = False
         self._lock = asyncio.Lock()
 
@@ -75,10 +83,6 @@ class StreamManager:
                         # Logic for adding delta is tricky without full datetime obj math, but straightforward.
                         target_date = d  # For today
                         if days_delta == 1:
-                            # Add one day
-                            # Quick hack for pure datetime addition without timedelta import conflict if any
-                            # We should import timedelta
-                            from datetime import timedelta
                             target_date = d + timedelta(days=1)
                         
                         dir_path = target_date.strftime(f"{base}/%Y/%m/%d")
@@ -97,18 +101,101 @@ class StreamManager:
                     if stream.enabled:
                         active_stream_ids.add(stream.id)
                         if stream.id not in self.processes:
-                            # Start it
                             await self.start_stream(stream, session)
                         else:
-                            # Check if dead
                             proc = self.processes[stream.id]
                             if proc.returncode is not None:
-                                # It died
                                 await self.handle_failure(stream, session)
+                            else:
+                                # Process is alive — check for silent stall.
+                                await self._check_stall(stream, session)
                     else:
-                        # Should be stopped
                         if stream.id in self.processes:
                             await self.stop_stream(stream.id)
+
+    async def _check_stall(self, stream: Stream, session: Session):
+        """Detect a silently-stalled ffmpeg process (alive but writing nothing)."""
+        start_t = self.stream_start_times.get(stream.id)
+        if start_t is None or (time.monotonic() - start_t) < _STALL_GRACE_SECONDS:
+            return
+
+        last_mtime = self._latest_audio_mtime(stream.name)
+        stream_logger = self.stream_loggers.get(stream.id, logger)
+
+        if last_mtime is None:
+            # No file ever written since start — wait a full segment period before complaining.
+            seg_time = stream.mandatory_params.get("segment_time", 3600)
+            if (time.monotonic() - start_t) > seg_time + _STALL_GRACE_SECONDS:
+                stream_logger.warning(
+                    f"Stream {stream.name}: no audio file has been written "
+                    f"{time.monotonic() - start_t:.0f}s after start. "
+                    "Process may be stalled — restarting."
+                )
+                await self._restart_stalled(stream, session)
+            return
+
+        age = time.time() - last_mtime
+        if age > _STALL_THRESHOLD_SECONDS:
+            stream_logger.warning(
+                f"Stream {stream.name}: last audio file not updated for {age:.0f}s "
+                f"(threshold {_STALL_THRESHOLD_SECONDS}s). "
+                "ffmpeg appears stalled — restarting."
+            )
+            await self._restart_stalled(stream, session)
+        else:
+            stream_logger.debug(
+                f"Stream {stream.name}: last audio file updated {age:.0f}s ago — OK"
+            )
+
+    def _latest_audio_mtime(self, stream_name: str) -> Optional[float]:
+        """Return the mtime of the most-recently modified audio file for this stream,
+        checking only today's and yesterday's directories for efficiency."""
+        base = f"/data/recordings/{stream_name}"
+        if not os.path.exists(base):
+            return None
+
+        now = datetime.utcnow()
+        dirs_to_check = [
+            now.strftime(f"{base}/%Y/%m/%d"),
+            (now - timedelta(days=1)).strftime(f"{base}/%Y/%m/%d"),
+        ]
+
+        latest: Optional[float] = None
+        for d in dirs_to_check:
+            if not os.path.isdir(d):
+                continue
+            for fname in os.listdir(d):
+                if not fname.endswith((".wav", ".mp3", ".aac")):
+                    continue
+                try:
+                    mtime = os.path.getmtime(os.path.join(d, fname))
+                    if latest is None or mtime > latest:
+                        latest = mtime
+                except OSError:
+                    pass
+        return latest
+
+    async def _restart_stalled(self, stream: Stream, session: Session):
+        """Force-stop a stalled stream so the next reconcile loop restarts it."""
+        proc = self.processes.get(stream.id)
+        if proc and proc.returncode is None:
+            try:
+                proc.kill()
+                await asyncio.wait_for(proc.wait(), timeout=5.0)
+            except Exception:
+                pass
+        del self.processes[stream.id]
+        self.stream_start_times.pop(stream.id, None)
+        if stream.id in self.stream_loggers:
+            del self.stream_loggers[stream.id]
+
+        stream.current_status = "error"
+        stream.last_error = "Stall detected: no audio output, process restarted"
+        session.add(stream)
+        event = Event(stream_id=stream.id, level="error",
+                      message="Stream stall detected — restarted")
+        session.add(event)
+        session.commit()
 
     async def start_stream(self, stream: Stream, session: Session):
         logger.info(f"Starting stream: {stream.name}")
@@ -135,6 +222,7 @@ class StreamManager:
             )
             
             self.processes[stream.id] = proc
+            self.stream_start_times[stream.id] = time.monotonic()
             stream.current_status = "running"
             stream.last_up = datetime.utcnow()
             stream.last_error = None
@@ -166,8 +254,8 @@ class StreamManager:
                 except asyncio.TimeoutError:
                     proc.kill()
             del self.processes[stream_id]
-            
-            # Clean up stream logger
+            self.stream_start_times.pop(stream_id, None)
+
             if stream_id in self.stream_loggers:
                 stream_logger = self.stream_loggers[stream_id]
                 stream_logger.info(f"Stream {stream_id} stopped")
@@ -182,41 +270,40 @@ class StreamManager:
                     session.commit()
 
     async def handle_failure(self, stream: Stream, session: Session):
-        # Get stream logger if it exists
+        proc = self.processes[stream.id]
+        exit_code = proc.returncode
         stream_logger = self.stream_loggers.get(stream.id, logger)
-        stream_logger.error(f"Stream {stream.name} (ID: {stream.id}) process died unexpectedly")
-        
-        # Clean up process handle
+        stream_logger.error(
+            f"Stream {stream.name} (ID: {stream.id}) process exited unexpectedly "
+            f"(exit code: {exit_code})"
+        )
+
         del self.processes[stream.id]
-        
-        # Clean up logger
+        self.stream_start_times.pop(stream.id, None)
+
         if stream.id in self.stream_loggers:
             del self.stream_loggers[stream.id]
-        
-        # Update Status
+
         stream.current_status = "error"
-        stream.last_error = "Process exited unexpectedly"
+        stream.last_error = f"Process exited unexpectedly (exit code: {exit_code})"
         session.add(stream)
         session.commit()
-        
-        event = Event(stream_id=stream.id, level="error", message="Stream process died")
+
+        event = Event(
+            stream_id=stream.id,
+            level="error",
+            message=f"Stream process exited (exit code: {exit_code})"
+        )
         session.add(event)
         session.commit()
-        
-        # Retry logic could be here (count retries, delay)
-        # For now, let the next loop iteration pick it up immediately
-        # But we should probably add a delay or check 'retry policy'
-        # Simple policy: just restart on next loop (10s delay implicitly)
 
     async def monitor_output(self, stream_id: int, proc: asyncio.subprocess.Process):
-        """Reads stderr/stdout to log events or detect issues."""
-        # Get the stream-specific logger
+        """Reads ffmpeg stderr to surface log lines and detect unexpected exits."""
         stream_logger = self.stream_loggers.get(stream_id, logger)
-        
-        # ffmpeg logs to stderr mainly. Use chunked reads rather than readline()
-        # because ffmpeg can emit very long lines without separators.
+
         try:
             if proc.stderr is None:
+                stream_logger.warning(f"Stream {stream_id}: no stderr pipe available")
                 return
 
             buffer = b""
@@ -239,8 +326,19 @@ class StreamManager:
 
             if buffer:
                 self._log_stream_line(stream_logger, buffer)
+
         except Exception as e:
-            stream_logger.error(f"Error monitoring output: {e}")
+            stream_logger.error(f"Stream {stream_id}: error reading ffmpeg output: {e}")
+        finally:
+            # Ensure the process is fully reaped so returncode is set.
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=5.0)
+            except Exception:
+                pass
+            exit_code = proc.returncode
+            stream_logger.info(
+                f"Stream {stream_id}: ffmpeg stderr closed (exit code: {exit_code})"
+            )
 
     def _log_stream_line(self, stream_logger: logging.Logger, raw_line: bytes):
         line_str = raw_line.decode('utf-8', errors='ignore').strip()
@@ -252,6 +350,9 @@ class StreamManager:
             stream_logger.error(line_str)
         elif 'warning' in line_lower:
             stream_logger.warning(line_str)
+        elif line_str.startswith("size=") or line_str.startswith("frame="):
+            # ffmpeg progress stats — log at DEBUG to avoid flooding log files.
+            stream_logger.debug(line_str)
         else:
             stream_logger.info(line_str)
 

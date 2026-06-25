@@ -17,7 +17,7 @@ async def get_optional_user(request: Request):
             # We manually reuse the logic from auth.get_current_user but relaxed
             # Ideally we reuse the dependency but it raises 401.
             # For pages, if 401, we redirect to login.
-            return None 
+            return None
     except:
         pass
     return None
@@ -29,64 +29,63 @@ async def login_required(request: Request, session: Session = Depends(get_sessio
         user = await get_current_user(request, session)
         return user
     except HTTPException:
-        return None 
+        return None
 
 @router.get("/login")
 def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse(request, "login.html")
 
 @router.get("/dashboard")
 async def dashboard(request: Request, user: User = Depends(login_required), session: Session = Depends(get_session)):
     if not user: return RedirectResponse("/login")
     streams = session.exec(select(Stream)).all()
-    return templates.TemplateResponse("dashboard.html", {"request": request, "user": user, "streams": streams})
+    return templates.TemplateResponse(request, "dashboard.html", {"user": user, "streams": streams})
 
 @router.get("/stats")
 async def stats_page(request: Request, user: User = Depends(login_required), session: Session = Depends(get_session)):
     if not user: return RedirectResponse("/login")
-    streams = session.exec(select(Stream)).all() # For filter dropdowns if needed
-    return templates.TemplateResponse("stats.html", {"request": request, "user": user, "streams": streams})
+    streams = session.exec(select(Stream)).all()
+    return templates.TemplateResponse(request, "stats.html", {"user": user, "streams": streams})
 
 @router.get("/streams")
 async def streams_page(request: Request, user: User = Depends(login_required), session: Session = Depends(get_session)):
     if not user: return RedirectResponse("/login")
     streams = session.exec(select(Stream)).all()
-    return templates.TemplateResponse("streams.html", {"request": request, "user": user, "streams": streams})
+    return templates.TemplateResponse(request, "streams.html", {"user": user, "streams": streams})
 
 @router.get("/streams/new")
 async def new_stream_page(request: Request, user: User = Depends(login_required)):
     if not user: return RedirectResponse("/login")
     if user.role != UserRole.ADMIN: return RedirectResponse("/dashboard")
-    return templates.TemplateResponse("stream_edit.html", {"request": request, "user": user, "stream": None})
+    return templates.TemplateResponse(request, "stream_edit.html", {"user": user, "stream": None})
 
 @router.get("/streams/{stream_id}")
 async def stream_detail(request: Request, stream_id: int, user: User = Depends(login_required), session: Session = Depends(get_session)):
     if not user: return RedirectResponse("/login")
     stream = session.get(Stream, stream_id)
     if not stream: return RedirectResponse("/streams")
-    
-    # Get recent recordings
+
     recordings = session.exec(
         select(Recording)
         .where(Recording.stream_id == stream.id, Recording.status != "deleted")
         .order_by(desc(Recording.start_ts))
         .limit(20)
     ).all()
-    
-    return templates.TemplateResponse("stream_detail.html", {"request": request, "user": user, "stream": stream, "recordings": recordings})
+
+    return templates.TemplateResponse(request, "stream_detail.html", {"user": user, "stream": stream, "recordings": recordings})
 
 @router.get("/streams/{stream_id}/edit")
 async def edit_stream_page(request: Request, stream_id: int, user: User = Depends(login_required), session: Session = Depends(get_session)):
     if not user: return RedirectResponse("/login")
     if user.role != UserRole.ADMIN: return RedirectResponse("/dashboard")
     stream = session.get(Stream, stream_id)
-    return templates.TemplateResponse("stream_edit.html", {"request": request, "user": user, "stream": stream})
+    return templates.TemplateResponse(request, "stream_edit.html", {"user": user, "stream": stream})
 
 @router.get("/recordings")
 async def recordings_page(request: Request, user: User = Depends(login_required), session: Session = Depends(get_session)):
     if not user: return RedirectResponse("/login")
     streams = session.exec(select(Stream)).all()
-    return templates.TemplateResponse("recordings.html", {"request": request, "user": user, "streams": streams})
+    return templates.TemplateResponse(request, "recordings.html", {"user": user, "streams": streams})
 
 @router.get("/settings")
 async def settings_page(request: Request, user: User = Depends(login_required), session: Session = Depends(get_session)):
@@ -94,17 +93,17 @@ async def settings_page(request: Request, user: User = Depends(login_required), 
     users_list = []
     if user.role == UserRole.ADMIN:
         users_list = session.exec(select(User)).all()
-    return templates.TemplateResponse("settings.html", {"request": request, "user": user, "users": users_list})
+    return templates.TemplateResponse(request, "settings.html", {"user": user, "users": users_list})
 
 @router.get("/settings/users/new")
 async def new_user_page(request: Request, user: User = Depends(login_required)):
     if not user: return RedirectResponse("/login")
     if user.role != UserRole.ADMIN: return RedirectResponse("/dashboard")
-    return templates.TemplateResponse("user_edit.html", {"request": request, "user": user, "user_obj": None})
+    return templates.TemplateResponse(request, "user_edit.html", {"user": user, "user_obj": None})
 
 @router.get("/settings/users/{user_id}")
 async def edit_user_page(request: Request, user_id: int, user: User = Depends(login_required), session: Session = Depends(get_session)):
     if not user: return RedirectResponse("/login")
     if user.role != UserRole.ADMIN: return RedirectResponse("/dashboard")
     user_obj = session.get(User, user_id)
-    return templates.TemplateResponse("user_edit.html", {"request": request, "user": user, "user_obj": user_obj})
+    return templates.TemplateResponse(request, "user_edit.html", {"user": user, "user_obj": user_obj})
