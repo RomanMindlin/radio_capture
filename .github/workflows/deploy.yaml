@@ -59,10 +59,64 @@ jobs:
           key: ${{ secrets.SEHEL_SSH_KEY }}
           envs: IMAGE_NAME,GHCR_USERNAME,GHCR_TOKEN,OPENAI_API_KEY,ENABLE_RADIO_LOGS
           script: |
+            set -u
             cd /home/mindlin/radio_capture
-            git pull || true
+
+            # docker-compose.yaml is read from this checkout, so a failed update
+            # silently deploys the new image against an old compose file.
+            # channels.json is gitignored and therefore untouched by this.
+            REPO_STALE=0
+            git fetch origin main
+            if git merge --ff-only origin/main; then
+              echo "Checkout updated to $(git rev-parse --short HEAD)"
+            else
+              REPO_STALE=1
+              echo "::error::git checkout at /home/mindlin/radio_capture could NOT be fast-forwarded"
+              echo "::error::Local commits not on origin/main:"
+              git log --oneline origin/main..HEAD || true
+              echo "::error::Deploying with a STALE docker-compose.yaml ($(git rev-parse --short HEAD))"
+            fi
+
             docker login ghcr.io -u "$GHCR_USERNAME" -p "$GHCR_TOKEN"
             docker pull "$IMAGE_NAME"
             docker rm -f radio-capture || true
             docker image prune -f
             IMAGE_NAME="$IMAGE_NAME" OPENAI_API_KEY="$OPENAI_API_KEY" ENABLE_RADIO_LOGS="$ENABLE_RADIO_LOGS" docker compose -f docker-compose.yaml up -d --no-build --pull never
+
+            # Post-deploy verification. Without this, the containers can come up
+            # in a state where no summary can ever be sent and nothing says so.
+            DEPLOY_OK=1
+            sleep 10
+            docker compose -f docker-compose.yaml ps
+
+            for c in radio-capture radio-capture-watcher; do
+              if [ "$(docker inspect -f '{{.State.Running}}' "$c" 2>/dev/null)" = "true" ]; then
+                echo "OK: $c is running"
+              else
+                echo "::error::$c is NOT running after deploy"
+                docker logs --tail 40 "$c" 2>&1 || true
+                DEPLOY_OK=0
+              fi
+            done
+
+            # The summary bot only posts if cron was configured from the mounted
+            # channels.json. Print the schedule line only — the file holds the API key.
+            if docker exec radio-capture test -f /config/channels.json; then
+              echo "OK: /config/channels.json is mounted"
+            else
+              echo "::error::/config/channels.json is missing in the container — cron is disabled, NO summaries will be sent"
+              DEPLOY_OK=0
+            fi
+
+            if docker exec radio-capture test -f /etc/cron.d/radio-summary; then
+              echo "Cron schedule: $(docker exec radio-capture grep -E '^[^#A-Z]' /etc/cron.d/radio-summary | head -1 | cut -d' ' -f1-5)"
+            else
+              echo "::error::/etc/cron.d/radio-summary was not created — NO summaries will be sent"
+              DEPLOY_OK=0
+            fi
+
+            if [ "$REPO_STALE" = "1" ] || [ "$DEPLOY_OK" = "0" ]; then
+              echo "Deploy finished with problems — see the errors above"
+              exit 1
+            fi
+            echo "Deploy verified"
