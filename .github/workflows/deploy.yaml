@@ -81,11 +81,39 @@ jobs:
             docker pull "$IMAGE_NAME"
             docker rm -f radio-capture || true
             docker image prune -f
-            IMAGE_NAME="$IMAGE_NAME" OPENAI_API_KEY="$OPENAI_API_KEY" ENABLE_RADIO_LOGS="$ENABLE_RADIO_LOGS" docker compose -f docker-compose.yaml up -d --no-build --pull never
+
+            DEPLOY_OK=1
+
+            # The watcher reserves an nvidia device, so a broken driver stops it
+            # from starting at all — which silently kills the whole ASR pipeline.
+            # Probe with nvidia-container-cli: it is the tool docker actually uses,
+            # and it exists on this headless host, where nvidia-smi does not.
+            if command -v nvidia-container-cli >/dev/null 2>&1; then
+              if nvidia-container-cli info >/dev/null 2>&1; then
+                echo "OK: GPU usable by the container runtime"
+                nvidia-container-cli info 2>&1 | grep -iE 'NVRM|CUDA|Model' | head -3
+              else
+                DEPLOY_OK=0
+                echo "::error::nvidia-container-cli cannot initialise — the GPU-reserving watcher container cannot start"
+                nvidia-container-cli info 2>&1 | head -5
+                echo "::error::Loaded kernel module: $(cat /proc/driver/nvidia/version 2>/dev/null | head -1)"
+                echo "::error::Userspace NVML: $(readlink -f /usr/lib/x86_64-linux-gnu/libnvidia-ml.so.1 2>/dev/null)"
+                echo "::error::If those two versions differ, the driver was upgraded without the matching"
+                echo "::error::kernel module. Check: grep -i nvidia /var/log/apt/history.log"
+              fi
+            else
+              echo "Note: nvidia-container-cli not found on host — skipping GPU check"
+            fi
+
+            # Keep going even if compose fails, so the checks below can report
+            # exactly which container is down and why.
+            IMAGE_NAME="$IMAGE_NAME" OPENAI_API_KEY="$OPENAI_API_KEY" ENABLE_RADIO_LOGS="$ENABLE_RADIO_LOGS" docker compose -f docker-compose.yaml up -d --no-build --pull never || {
+              DEPLOY_OK=0
+              echo "::error::docker compose up failed"
+            }
 
             # Post-deploy verification. Without this, the containers can come up
             # in a state where no summary can ever be sent and nothing says so.
-            DEPLOY_OK=1
             sleep 10
             docker compose -f docker-compose.yaml ps
 

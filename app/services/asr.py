@@ -42,10 +42,23 @@ def _load_model(model_name: str = "tiny"):
             # Whisper uses XDG_CACHE_HOME or TORCH_HOME for model cache
             os.environ['XDG_CACHE_HOME'] = cache_dir
 
+            cuda_available = torch.cuda.is_available()
             target_device = os.environ.get("WHISPER_DEVICE")
             if target_device is None:
-                target_device = "cuda" if torch.cuda.is_available() else "cpu"
-            
+                target_device = "cuda" if cuda_available else "cpu"
+
+            logger.info(
+                "Whisper device: %s (WHISPER_DEVICE=%s, torch.cuda.is_available()=%s)",
+                target_device,
+                os.environ.get("WHISPER_DEVICE", "<unset>"),
+                cuda_available,
+            )
+            if target_device == "cpu":
+                logger.warning(
+                    "Whisper is running on CPU — transcription will be several times "
+                    "slower and may not keep up with the incoming segments"
+                )
+
             logger.info(f"Using Whisper cache directory: {cache_dir}")
             _whisper_model = whisper.load_model(
                 model_name, 

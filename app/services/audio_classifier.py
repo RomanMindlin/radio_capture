@@ -44,9 +44,16 @@ def _get_model():
                 logger.info("Model downloaded successfully")
             
             from panns_inference import AudioTagging
-            
-            logger.info(f"Loading PANNs CNN14 model from {checkpoint_path}...")
-            _model = AudioTagging(checkpoint_path=checkpoint_path, device='cuda' if torch.cuda.is_available() else 'cpu')
+
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            logger.info(
+                "Loading PANNs CNN14 model from %s on device=%s "
+                "(torch.cuda.is_available()=%s)",
+                checkpoint_path,
+                device,
+                torch.cuda.is_available(),
+            )
+            _model = AudioTagging(checkpoint_path=checkpoint_path, device=device)
             
             # AudioSet class labels that we'll use for classification
             # These are indices in the AudioSet ontology
