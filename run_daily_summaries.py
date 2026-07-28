@@ -8,7 +8,10 @@ import argparse
 import asyncio
 import json
 import logging
+import os
+import socket
 import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict
@@ -17,6 +20,11 @@ from app.core.logging_config import setup_logging
 
 # Configure logging
 logger = setup_logging("radio_capture.run_summaries")
+
+# Keep in sync with daily_radio_summary.py
+EXIT_OK = 0
+EXIT_ERROR = 1
+EXIT_NOTHING_TO_SEND = 2
 
 
 def parse_args() -> argparse.Namespace:
@@ -68,6 +76,21 @@ def load_channels_config(config_path: str) -> Dict:
         sys.exit(1)
 
 
+def _relay_child_output(channel_id: str, stream_name: str, raw: bytes) -> None:
+    """
+    Re-log the child process output line by line.
+
+    The child logs everything (including its errors) to stdout, so the previous
+    code — which logged stdout at DEBUG and only printed stderr on failure —
+    threw away every explanation of why a channel had failed.
+    """
+    if not raw:
+        return
+    for line in raw.decode(errors="replace").splitlines():
+        if line.strip():
+            logger.info("[%s|%s] %s", channel_id, stream_name, line.rstrip())
+
+
 async def run_summary_for_channel(
     channel: Dict,
     date_str: str,
@@ -75,17 +98,18 @@ async def run_summary_for_channel(
 ) -> bool:
     """
     Run daily_radio_summary.py for a single channel.
-    
+
     Args:
         channel: Channel configuration dictionary
         date_str: Date string in YYYY-MM-DD format
         script_path: Path to daily_radio_summary.py script
-    
+
     Returns:
         True if successful, False otherwise
     """
-    logger.info(f"Processing channel: {channel.get('telegram_channel_id')}")
-    
+    channel_id = channel.get("telegram_channel_id")
+    logger.info(f"Processing channel: {channel_id}")
+
     # Build command
     cmd = [
         sys.executable,
@@ -96,7 +120,9 @@ async def run_summary_for_channel(
         "--telegram-channel-id", channel["telegram_channel_id"],
         "--telegram-bot-token", channel["telegram_bot_token"]
     ]
-    
+
+    started = time.monotonic()
+
     try:
         # Run the subprocess
         process = await asyncio.create_subprocess_exec(
@@ -104,22 +130,41 @@ async def run_summary_for_channel(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        
+
         stdout, stderr = await process.communicate()
-        
-        if process.returncode == 0:
-            logger.info(f"✓ Successfully processed channel {channel.get('telegram_channel_id')}")
-            if stdout:
-                logger.debug(f"Output: {stdout.decode()}")
+        elapsed = time.monotonic() - started
+
+        # Always relay the child's own log lines, success or failure.
+        _relay_child_output(channel_id, "out", stdout)
+        _relay_child_output(channel_id, "err", stderr)
+
+        if process.returncode == EXIT_OK:
+            logger.info(
+                f"✓ Channel {channel_id}: summary posted (took {elapsed:.1f}s)"
+            )
             return True
-        else:
-            logger.error(f"✗ Failed to process channel {channel.get('telegram_channel_id')}")
-            if stderr:
-                logger.error(f"Error: {stderr.decode()}")
+
+        if process.returncode == EXIT_NOTHING_TO_SEND:
+            # Used to look identical to success in the logs, which is exactly how
+            # days of silence went unnoticed.
+            logger.warning(
+                f"✗ Channel {channel_id}: NOTHING WAS SENT — no transcribed speech "
+                f"was available for {date_str} (took {elapsed:.1f}s). "
+                f"Check the watcher / ASR pipeline."
+            )
             return False
-    
+
+        logger.error(
+            f"✗ Channel {channel_id}: failed with exit code {process.returncode} "
+            f"(took {elapsed:.1f}s) — see the [{channel_id}|out] lines above for the cause"
+        )
+        return False
+
     except Exception as e:
-        logger.error(f"✗ Exception while processing channel {channel.get('telegram_channel_id')}: {e}")
+        logger.error(
+            f"✗ Exception while processing channel {channel_id}: {e}",
+            exc_info=True,
+        )
         return False
 
 
@@ -127,8 +172,24 @@ async def main():
     """Main execution function."""
     args = parse_args()
     
+    # This banner is the proof that cron actually fired. If it is missing from the
+    # logs for a day, the problem is the schedule/cron daemon, not the summary code.
     logger.info("=== Run Daily Summaries Script ===")
-    
+    logger.info(
+        "Started at %s UTC | host=%s pid=%s cwd=%s",
+        datetime.utcnow().isoformat(timespec="seconds"),
+        socket.gethostname(),
+        os.getpid(),
+        os.getcwd(),
+    )
+    logger.info(
+        "Environment: OPENAI_API_KEY=%s DATABASE_URL=%s ENABLE_RADIO_LOGS=%s LOG_DIR=%s",
+        "set" if os.getenv("OPENAI_API_KEY") else "MISSING",
+        os.getenv("DATABASE_URL", "<default>"),
+        os.getenv("ENABLE_RADIO_LOGS", "<unset>"),
+        os.getenv("LOG_DIR", "<default>"),
+    )
+
     # Determine date to process
     if args.date:
         date_str = args.date
@@ -139,12 +200,19 @@ async def main():
             logger.error(f"Invalid date format: {date_str}. Expected YYYY-MM-DD")
             sys.exit(1)
     else:
-        # Default to yesterday
+        # Default to yesterday, in the *container* local time (UTC in Docker), not
+        # in each channel's timezone — worth knowing when a summary looks shifted.
         yesterday = datetime.now() - timedelta(days=1)
         date_str = yesterday.strftime("%Y-%m-%d")
-    
-    logger.info(f"Processing date: {date_str}")
-    
+
+    logger.info(
+        "Processing date: %s (local now=%s, UTC now=%s, source=%s)",
+        date_str,
+        datetime.now().isoformat(timespec="seconds"),
+        datetime.utcnow().isoformat(timespec="seconds"),
+        "--date argument" if args.date else "yesterday in container local time",
+    )
+
     # Load configuration
     config = load_channels_config(args.config)
     channels = config["channels"]
@@ -183,9 +251,11 @@ async def main():
     logger.info(f"Total channels: {total}")
     logger.info(f"Successful: {successful}")
     logger.info(f"Failed: {failed}")
-    
+
     if failed > 0:
-        logger.warning(f"{failed} channel(s) failed to process")
+        logger.warning(
+            f"{failed} of {total} channel(s) received NO summary for {date_str}"
+        )
         sys.exit(1)
     else:
         logger.info("All channels processed successfully")

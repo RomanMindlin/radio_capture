@@ -9,11 +9,13 @@ from sqlmodel import Session, select
 from app.api import auth, recordings, streams, ui_routes, users
 from app.api.auth import get_password_hash
 from app.core.db import create_db_and_tables, engine, get_session
-from app.core.logging_config import setup_logging
+from app.core.logging_config import configure_app_logging, setup_logging
 from app.models.models import User, UserRole
 from app.services.stream_manager import manager
 
 logger = setup_logging("radio_capture.api")
+# Makes app.services.stream_manager logging visible; see configure_app_logging docstring.
+configure_app_logging("radio_capture.api")
 
 app = FastAPI(title="Radio Stream Capture Service")
 

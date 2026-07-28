@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"from app.services.stream_manager import StreamManager; print\\('stream_manager OK'\\)\")",
+      "Bash(python -c \"from app.services.ffmpeg_builder import FfmpegBuilder; print\\('ffmpeg_builder OK'\\)\")",
+      "Bash(.venv/bin/python -c \"from app.services.stream_manager import StreamManager; print\\('stream_manager OK'\\)\")",
+      "Bash(.venv/bin/python -c \"from app.services.ffmpeg_builder import FfmpegBuilder; print\\('ffmpeg_builder OK'\\)\")",
+      "Bash(python3 -m py_compile /home/mindlin/yd/proj/radio_capture/app/services/stream_manager.py)",
+      "Bash(python3 -m py_compile /home/mindlin/yd/proj/radio_capture/app/api/ui_routes.py)"
+    ]
+  }
+}
