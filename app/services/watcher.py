@@ -21,6 +21,13 @@ HEALTH_LOG_INTERVAL = timedelta(minutes=15)
 STUCK_LOOKBACK_HOURS = 36
 # Give up re-queueing a recording after this many failed attempts.
 MAX_PROCESS_ATTEMPTS = 3
+# Cap new discoveries per scan cycle. scan_files() runs synchronously on the
+# event loop, so an unbounded backlog (e.g. after ASR was down for a while)
+# would keep the loop busy discovering for hours and starve the very
+# classification/ASR work that drains the backlog. Capping lets each cycle
+# return promptly; the remaining files are picked up on the next cycle, once
+# already-queued recordings have had a chance to process.
+MAX_DISCOVER_PER_CYCLE = 500
 
 class RecordingWatcher:
     def __init__(self):
@@ -72,6 +79,7 @@ class RecordingWatcher:
 
     async def scan_files(self):
         discovered = 0
+        capped = False
         with Session(engine) as session:
             streams = session.exec(select(Stream)).all()
             enabled_streams = [s for s in streams if s.enabled]
@@ -84,6 +92,7 @@ class RecordingWatcher:
                 return
 
             for stream in streams:
+                if capped: break
                 if not stream.enabled: continue
 
                 # Check stream dir
@@ -161,11 +170,19 @@ class RecordingWatcher:
                         except Exception as e:
                             logger.error(f"Error processing file {file}: {e}", exc_info=True)
 
+                        if discovered >= MAX_DISCOVER_PER_CYCLE:
+                            capped = True
+                            break
+
+                    if capped:
+                        break
+
         if discovered:
             logger.info(
-                "Scan cycle finished: %d new recording(s) queued, %d task(s) in flight",
+                "Scan cycle finished: %d new recording(s) queued, %d task(s) in flight%s",
                 discovered,
                 len(self._tasks),
+                " — discovery cap hit, remaining files next cycle" if capped else "",
             )
 
     async def _process_recording_async(self, recording_id: int, file_path: str, language: str):
