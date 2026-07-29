@@ -47,6 +47,11 @@ async def stats_page(request: Request, user: User = Depends(login_required), ses
     streams = session.exec(select(Stream)).all()
     return templates.TemplateResponse(request, "stats.html", {"user": user, "streams": streams})
 
+@router.get("/asr-queue")
+async def asr_queue_page(request: Request, user: User = Depends(login_required)):
+    if not user: return RedirectResponse("/login")
+    return templates.TemplateResponse(request, "asr_queue.html", {"user": user})
+
 @router.get("/streams")
 async def streams_page(request: Request, user: User = Depends(login_required), session: Session = Depends(get_session)):
     if not user: return RedirectResponse("/login")

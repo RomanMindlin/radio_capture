@@ -12,7 +12,7 @@ from sqlmodel import Session, desc, select
 from app.api.auth import get_current_user
 from app.core.db import get_session
 from app.models.models import Recording, Stream, User, UserRole
-from app.services.stats import get_detailed_stats
+from app.services.stats import get_asr_queue_stats, get_detailed_stats
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -26,6 +26,17 @@ async def get_stats_summary(
     Get aggregated stats for all streams.
     """
     return get_detailed_stats(days=days)
+
+@router.get("/asr-queue")
+async def get_asr_queue(
+    days: int = 3,
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Per-station ASR/classification processing-queue snapshot for monitoring
+    how far behind transcription is on each station.
+    """
+    return get_asr_queue_stats(days=days)
 
 @router.get("/files")
 async def list_files(

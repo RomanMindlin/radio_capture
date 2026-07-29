@@ -1,0 +1,194 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">ASR Processing Queue</h1>
+    <div class="btn-toolbar mb-2 mb-md-0 gap-2 align-items-center">
+        <select id="window-select" class="form-select form-select-sm" style="width:auto">
+            <option value="1">Last 1 day</option>
+            <option value="3" selected>Last 3 days</option>
+            <option value="7">Last 7 days</option>
+        </select>
+        <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" id="autorefresh" checked>
+            <label class="form-check-label small" for="autorefresh">Auto&nbsp;(15s)</label>
+        </div>
+        <button id="refresh-btn" type="button" class="btn btn-sm btn-outline-secondary">Refresh</button>
+    </div>
+</div>
+
+<p class="text-muted small" id="updated-at">Loading&hellip;</p>
+
+<!-- Overall summary -->
+<div class="row g-3 mb-4" id="summary-cards"></div>
+
+<!-- Queue depth by station -->
+<div class="card mb-4">
+    <div class="card-header"><strong>Queue depth by station</strong>
+        <span class="text-muted small">(pending classification + pending ASR vs. transcribed)</span>
+    </div>
+    <div class="card-body">
+        <canvas id="queue-chart" height="90"></canvas>
+    </div>
+</div>
+
+<!-- Per-station detail -->
+<div class="table-responsive">
+    <table class="table table-sm table-hover align-middle">
+        <thead>
+            <tr>
+                <th>Station</th>
+                <th class="text-end">Pending class.</th>
+                <th class="text-end">Pending ASR</th>
+                <th class="text-end">Queue total</th>
+                <th class="text-end">Transcribed</th>
+                <th class="text-end">Music</th>
+                <th class="text-end">Ad</th>
+                <th class="text-end">Errors</th>
+                <th class="text-end">Oldest pending</th>
+                <th class="text-end">Done 1h / 24h</th>
+                <th class="text-end">Avg s/rec</th>
+            </tr>
+        </thead>
+        <tbody id="station-rows">
+            <tr><td colspan="11" class="text-center">
+                <div class="spinner-border spinner-border-sm" role="status"></div>
+            </td></tr>
+        </tbody>
+    </table>
+</div>
+
+<script>
+    let queueChart = null;
+    let timer = null;
+
+    document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById("refresh-btn").addEventListener("click", load);
+        document.getElementById("window-select").addEventListener("change", load);
+        document.getElementById("autorefresh").addEventListener("change", scheduleRefresh);
+        load();
+    });
+
+    function scheduleRefresh() {
+        if (timer) { clearInterval(timer); timer = null; }
+        if (document.getElementById("autorefresh").checked) {
+            timer = setInterval(load, 15000);
+        }
+    }
+
+    function fmtAge(seconds) {
+        if (seconds === null || seconds === undefined) return "&ndash;";
+        const s = Math.max(0, Math.floor(seconds));
+        if (s < 90) return s + "s";
+        const m = Math.floor(s / 60);
+        if (m < 90) return m + "m";
+        const h = Math.floor(m / 60);
+        if (h < 48) return h + "h " + (m % 60) + "m";
+        return Math.floor(h / 24) + "d " + (h % 24) + "h";
+    }
+
+    function ageClass(seconds) {
+        if (seconds === null || seconds === undefined) return "";
+        if (seconds > 6 * 3600) return "text-danger fw-bold";
+        if (seconds > 2 * 3600) return "text-warning";
+        return "text-success";
+    }
+
+    async function load() {
+        const days = document.getElementById("window-select").value;
+        let data;
+        try {
+            const resp = await fetch(`/api/stats/asr-queue?days=${days}`);
+            if (resp.status === 401) { window.location = "/login"; return; }
+            if (!resp.ok) throw new Error("HTTP " + resp.status);
+            data = await resp.json();
+        } catch (e) {
+            document.getElementById("updated-at").textContent = "Failed to load: " + e.message;
+            return;
+        }
+        renderSummary(data.totals);
+        renderTable(data.stations);
+        renderChart(data.stations);
+        const t = new Date(data.generated_at);
+        document.getElementById("updated-at").textContent =
+            `Window: last ${data.window_days} day(s) · updated ${t.toLocaleTimeString()}`;
+        scheduleRefresh();
+    }
+
+    function card(title, value, sub, cls) {
+        return `<div class="col-6 col-md-3 col-xl-2">
+            <div class="card h-100 text-center">
+                <div class="card-body py-3">
+                    <div class="text-muted small text-uppercase">${title}</div>
+                    <div class="fs-3 fw-bold ${cls || ''}">${value}</div>
+                    <div class="small text-muted">${sub || '&nbsp;'}</div>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    function renderSummary(t) {
+        const eta = t.eta_hours === null ? "&ndash;"
+            : (t.eta_hours < 0.1 ? "clear" : t.eta_hours + "h");
+        const pendCls = t.pending_total > 0 ? "text-danger" : "text-success";
+        document.getElementById("summary-cards").innerHTML =
+            card("Queue total", t.pending_total, "awaiting processing", pendCls) +
+            card("Pending ASR", t.pending_asr, "speech, no transcript") +
+            card("Pending class.", t.pending_classification, "not classified yet") +
+            card("Throughput", t.throughput_per_hour + "/h", "transcribed / hour") +
+            card("ETA to drain", eta, "at current rate") +
+            card("Done 24h", t.done_last_24h, "transcribed");
+    }
+
+    function renderTable(stations) {
+        if (!stations.length) {
+            document.getElementById("station-rows").innerHTML =
+                `<tr><td colspan="11" class="text-center text-muted">No streams.</td></tr>`;
+            return;
+        }
+        document.getElementById("station-rows").innerHTML = stations.map(s => `
+            <tr>
+                <td><a href="/streams/${s.stream_id}">${s.name}</a></td>
+                <td class="text-end">${s.pending_classification}</td>
+                <td class="text-end">${s.pending_asr}</td>
+                <td class="text-end fw-bold ${s.pending_total > 0 ? 'text-danger' : 'text-success'}">${s.pending_total}</td>
+                <td class="text-end">${s.transcribed}</td>
+                <td class="text-end text-muted">${s.music}</td>
+                <td class="text-end text-muted">${s.ad}</td>
+                <td class="text-end ${s.errors > 0 ? 'text-danger' : 'text-muted'}">${s.errors}</td>
+                <td class="text-end ${ageClass(s.oldest_pending_age_seconds)}">${fmtAge(s.oldest_pending_age_seconds)}</td>
+                <td class="text-end">${s.done_last_1h} / ${s.done_last_24h}</td>
+                <td class="text-end">${s.avg_proc_seconds === null ? '&ndash;' : s.avg_proc_seconds}</td>
+            </tr>
+        `).join("");
+    }
+
+    function renderChart(stations) {
+        const labels = stations.map(s => s.name);
+        const ctx = document.getElementById("queue-chart").getContext("2d");
+        const datasets = [
+            { label: "Pending classification", data: stations.map(s => s.pending_classification), backgroundColor: "rgba(255, 193, 7, 0.7)" },
+            { label: "Pending ASR", data: stations.map(s => s.pending_asr), backgroundColor: "rgba(220, 53, 69, 0.7)" },
+            { label: "Transcribed", data: stations.map(s => s.transcribed), backgroundColor: "rgba(25, 135, 84, 0.6)" },
+        ];
+        if (queueChart) {
+            queueChart.data.labels = labels;
+            queueChart.data.datasets.forEach((d, i) => { d.data = datasets[i].data; });
+            queueChart.update();
+            return;
+        }
+        queueChart = new Chart(ctx, {
+            type: "bar",
+            data: { labels, datasets },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { stacked: true },
+                    y: { stacked: true, beginAtZero: true, title: { display: true, text: "Recordings" } }
+                },
+                plugins: { legend: { position: "bottom" } }
+            }
+        });
+    }
+</script>
+{% endblock %}
