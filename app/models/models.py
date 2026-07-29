@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
-from sqlalchemy import Column, String
+from sqlalchemy import Column, Index, String
 from sqlmodel import JSON, Field, Relationship, SQLModel
 
 
@@ -40,9 +40,20 @@ class Stream(SQLModel, table=True):
     events: List["Event"] = Relationship(back_populates="stream")
 
 class Recording(SQLModel, table=True):
+    # Without ix_recording_path the watcher's per-file "is this already known?"
+    # lookup in scan_files() is a full table scan; on a large recording table
+    # that makes each scan O(n^2) and starves the classification/ASR pipeline.
+    # The two composite indexes cover the recurring cleanup / requeue / per-stat
+    # queries (start_ts- and stream_id-leading). Names match the ones created
+    # directly on the production DB, so create_all() is a no-op there.
+    __table_args__ = (
+        Index("ix_recording_ts_status", "start_ts", "status"),
+        Index("ix_recording_stream_ts", "stream_id", "start_ts"),
+    )
+
     id: Optional[int] = Field(default=None, primary_key=True)
     stream_id: int = Field(foreign_key="stream.id")
-    path: str
+    path: str = Field(index=True)
     start_ts: datetime
     end_ts: Optional[datetime] = None
     size_bytes: int = Field(default=0)
