@@ -54,7 +54,13 @@ PY
     # Build the command to run.
     # The marker line makes it possible to tell "cron never fired" apart from
     # "cron fired but the job produced nothing".
-    COMMAND="cd /app && echo \"[cron] \$(date -u +%Y-%m-%dT%H:%M:%SZ) firing run_daily_summaries.py\" && ${PYTHON_BIN} /app/run_daily_summaries.py --config ${CONFIG_PATH}; echo \"[cron] \$(date -u +%Y-%m-%dT%H:%M:%SZ) run_daily_summaries.py exited with \$?\""
+    # Every '%' MUST be written as '\%': in the command field of a crontab an
+    # unescaped '%' is turned into a newline and everything after the first one
+    # becomes the job's stdin. An unescaped 'date -u +%Y...' therefore truncated
+    # this whole line at "$(date -u +", so bash died with "unexpected EOF" and
+    # run_daily_summaries.py was never started — silently, because the
+    # ">> ${LOG_TARGET}" redirect was cut off along with the rest of the line.
+    COMMAND="cd /app && echo \"[cron] \$(date -u +\\%Y-\\%m-\\%dT\\%H:\\%M:\\%SZ) firing run_daily_summaries.py\" && ${PYTHON_BIN} /app/run_daily_summaries.py --config ${CONFIG_PATH}; echo \"[cron] \$(date -u +\\%Y-\\%m-\\%dT\\%H:\\%M:\\%SZ) run_daily_summaries.py exited with \$?\""
     COMMAND="{ ${COMMAND} ; } >> ${LOG_TARGET} 2>&1"
 
     # Create cron file.
