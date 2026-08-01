@@ -48,13 +48,13 @@ TELEGRAM_MAX_RETRIES = 4
 OPENAI_MAX_RETRIES = 3
 
 SUMMARY_INTRO_BY_LANGUAGE = {
-    "en": "What people talked about on the radio today.",
-    "he": "על מה אנשים דיברו ברדיו היום.",
-    "de": "Worüber die Leute heute im Radio gesprochen haben.",
-    "it": "Di cosa hanno parlato le persone alla radio oggi.",
-    "sp": "De qué habló la gente en la radio hoy.",
-    "fr": "De quoi les gens ont parlé à la radio aujourd'hui.",
-    "ru": "О чем люди говорили по радио сегодня.",
+    "en": "What people talked about on the radio yesterday.",
+    "he": "על מה אנשים דיברו ברדיו אתמול.",
+    "de": "Worüber die Leute gestern im Radio gesprochen haben.",
+    "it": "Di cosa hanno parlato le persone alla radio ieri.",
+    "sp": "De qué habló la gente en la radio ayer.",
+    "fr": "De quoi les gens ont parlé à la radio hier.",
+    "ru": "О чем люди говорили по радио вчера.",
 }
 
 
@@ -308,14 +308,15 @@ def build_llm_prompt_for_stream(
         "Task:",
         "- Identify 3-5 main topics discussed during the day",
         "- For each topic, capture key points and insights",
-        "- Write ONE coherent item summarizing one topic",
+        "- For one main topic that is most important, provide a more detailed summary",
+        "- For others write ONE coherent item summarizing one topic",
         "- Write each topic as a separate paragraph",
         "- Use clear and concise language",
         f"- Write the summary ONLY in {target_language}",
         "- CRITICAL: Keep the ENTIRE summary under 4000 characters total",
         "- Be concise - prioritize the most important topics if needed to stay within the character limit",
         "- Balance size of topics, high priority topics should be more detailed, lower priority topics can be shorter",
-        "",
+        "- When finished, go back and check that response is in {target_language} and under 4000 characters",
         "Topics may include:",
         "- News and current events",
         "- Politics",
