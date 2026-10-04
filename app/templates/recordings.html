@@ -250,7 +250,8 @@
 
         files.forEach(f => {
             const tr = document.createElement('tr');
-            const date = new Date(f.start_ts).toLocaleString();
+            // start_ts is naive UTC from the API; mark it as UTC so the browser converts to local time.
+            const date = new Date(f.start_ts + 'Z').toLocaleString();
             const sizeMb = (f.size_bytes / (1024 * 1024)).toFixed(2);
             const duration = new Date(f.duration_seconds * 1000).toISOString().substr(11, 8);
 
