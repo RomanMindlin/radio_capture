@@ -1,8 +1,16 @@
+# json-file logs are unbounded by default; the watcher logs every recording
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "3"
+
 services:
   radio:
     image: ${IMAGE_NAME:-radio-capture:latest}
     container_name: radio-capture
     restart: unless-stopped
+    logging: *default-logging
     environment:
       - SECRET_KEY
       - DATABASE_URL
@@ -19,6 +27,7 @@ services:
     image: ${IMAGE_NAME:-radio-capture:latest}
     container_name: radio-capture-watcher
     restart: unless-stopped
+    logging: *default-logging
     environment:
       - DATABASE_URL
       - OPENAI_API_KEY

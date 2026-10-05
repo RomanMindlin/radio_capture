@@ -70,7 +70,8 @@ def get_asr_queue_stats(days: int = 3) -> Dict[str, Any]:
       "window_days": int,
       "totals": {total, pending_classification, pending_asr, pending_total,
                  transcribed, music, ad, errors, done_last_1h, done_last_24h,
-                 throughput_per_hour, eta_hours},
+                 arrived_last_24h, throughput_per_hour, speech_ratio,
+                 expected_asr, asr_arrivals_per_hour, eta_hours},
       "stations": [ { per-station dict, sorted by pending_total desc }, ... ]
     }
     """
@@ -98,7 +99,8 @@ def get_asr_queue_stats(days: int = 3) -> Dict[str, Any]:
                      THEN r.start_ts END) AS oldest_pending_ts,
             SUM(CASE WHEN r.asr_ts >= :h1 THEN 1 ELSE 0 END) AS done_last_1h,
             SUM(CASE WHEN r.asr_ts >= :h24 THEN 1 ELSE 0 END) AS done_last_24h,
-            AVG(CASE WHEN r.asr_ts >= :h24 THEN r.asr_processing_seconds END) AS avg_proc_seconds
+            AVG(CASE WHEN r.asr_ts >= :h24 THEN r.asr_processing_seconds END) AS avg_proc_seconds,
+            SUM(CASE WHEN r.start_ts >= :h24 THEN 1 ELSE 0 END) AS arrived_last_24h
         FROM stream s
         LEFT JOIN recording r ON r.stream_id = s.id AND r.start_ts >= :cutoff
         GROUP BY s.id, s.name
@@ -108,7 +110,7 @@ def get_asr_queue_stats(days: int = 3) -> Dict[str, Any]:
     totals = {
         "total": 0, "pending_classification": 0, "pending_asr": 0,
         "pending_total": 0, "transcribed": 0, "music": 0, "ad": 0,
-        "errors": 0, "done_last_1h": 0, "done_last_24h": 0,
+        "errors": 0, "done_last_1h": 0, "done_last_24h": 0, "arrived_last_24h": 0,
     }
 
     with Session(engine) as session:
@@ -117,7 +119,7 @@ def get_asr_queue_stats(days: int = 3) -> Dict[str, Any]:
         for row in rows:
             (stream_id, name, total, pending_classification, pending_asr,
              transcribed, music, ad, errors, oldest_pending_ts,
-             done_last_1h, done_last_24h, avg_proc_seconds) = row
+             done_last_1h, done_last_24h, avg_proc_seconds, arrived_last_24h) = row
 
             total = total or 0
             pending_classification = pending_classification or 0
@@ -143,12 +145,13 @@ def get_asr_queue_stats(days: int = 3) -> Dict[str, Any]:
                 "done_last_1h": done_last_1h or 0,
                 "done_last_24h": done_last_24h or 0,
                 "avg_proc_seconds": round(avg_proc_seconds, 1) if avg_proc_seconds else None,
+                "arrived_last_24h": arrived_last_24h or 0,
             }
             stations.append(station)
 
             for key in ("total", "pending_classification", "pending_asr",
                         "transcribed", "music", "ad", "errors",
-                        "done_last_1h", "done_last_24h"):
+                        "done_last_1h", "done_last_24h", "arrived_last_24h"):
                 totals[key] += station[key]
             totals["pending_total"] += pending_total
 
@@ -158,11 +161,28 @@ def get_asr_queue_stats(days: int = 3) -> Dict[str, Any]:
     # 24h rate if nothing finished this hour, so a quiet minute doesn't read
     # as "never drains".
     throughput_per_hour = totals["done_last_1h"] or (totals["done_last_24h"] / 24.0)
-    eta_hours = (
-        round(totals["pending_asr"] / throughput_per_hour, 1)
-        if throughput_per_hour else None
-    )
+
+    # Unclassified recordings will turn into ASR work at the observed speech
+    # share, and new recordings keep arriving while the backlog drains, so
+    # the ETA is (known + expected ASR work) / (throughput - ASR arrival rate).
+    speech = totals["transcribed"] + totals["pending_asr"]
+    classified = speech + totals["music"] + totals["ad"]
+    speech_ratio = speech / classified if classified else 1.0
+    expected_asr = totals["pending_asr"] + totals["pending_classification"] * speech_ratio
+    asr_arrivals_per_hour = totals["arrived_last_24h"] / 24.0 * speech_ratio
+    net_drain_per_hour = throughput_per_hour - asr_arrivals_per_hour
+
+    if expected_asr < 1:
+        eta_hours = 0.0
+    elif net_drain_per_hour > 0:
+        eta_hours = round(expected_asr / net_drain_per_hour, 1)
+    else:
+        eta_hours = None  # not draining: ASR can't keep up with new speech
+
     totals["throughput_per_hour"] = round(throughput_per_hour, 1)
+    totals["speech_ratio"] = round(speech_ratio, 3)
+    totals["expected_asr"] = round(expected_asr)
+    totals["asr_arrivals_per_hour"] = round(asr_arrivals_per_hour, 1)
     totals["eta_hours"] = eta_hours
 
     return {

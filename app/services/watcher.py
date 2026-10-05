@@ -18,7 +18,7 @@ DEFAULT_RETENTION_DAYS = 3
 # How often to log the end-to-end pipeline health snapshot.
 HEALTH_LOG_INTERVAL = timedelta(minutes=15)
 # How far back to look for recordings that never got classified/transcribed.
-STUCK_LOOKBACK_HOURS = 36
+STUCK_LOOKBACK_HOURS = 72
 # Give up re-queueing a recording after this many failed attempts.
 MAX_PROCESS_ATTEMPTS = 3
 # Cap new discoveries per scan cycle. scan_files() runs synchronously on the
@@ -42,10 +42,12 @@ class RecordingWatcher:
         self._attempts: dict[int, int] = {}
         # recording ids currently queued or being processed
         self._in_flight: set[int] = set()
-        # Thread pool for CPU-intensive tasks (classification and ASR)
-        # max_workers=1 ensures only one file is processed at a time
-        # we need it since ASR isn't thread-safe
-        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="watcher-worker")
+        # Separate single-thread pools for classification and ASR. Each model is
+        # only ever touched by its own thread (ASR isn't thread-safe), but the two
+        # stages run concurrently, so a backlog of ASR jobs no longer blocks
+        # classification of new recordings (and vice versa).
+        self._classify_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="watcher-classify")
+        self._asr_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="watcher-asr")
 
     async def start(self):
         self.running = True
@@ -197,7 +199,7 @@ class RecordingWatcher:
             # Run classification in thread pool
             loop = asyncio.get_event_loop()
             classification = await loop.run_in_executor(
-                self._executor,
+                self._classify_executor,
                 classify_audio,
                 file_path
             )
@@ -219,7 +221,7 @@ class RecordingWatcher:
             if classification == "speech":
                 logger.info(f"Starting ASR for recording {recording_id} with language {language}")
                 result = await loop.run_in_executor(
-                    self._executor,
+                    self._asr_executor,
                     transcribe,
                     file_path,
                     "small",

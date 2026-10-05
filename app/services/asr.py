@@ -143,8 +143,12 @@ def transcribe(file_path: str, model: str = "tiny", language: str = "he") -> dic
             audio,
             language=language,
             task="transcribe",
-            verbose=False,
-            fp16=False  # Disable fp16 for CPU compatibility
+            verbose=None,  # False still prints a tqdm progress bar per file
+            # No temperature fallback: on noisy radio audio Whisper re-decodes the
+            # whole window up to 6 times (3-4s -> 50s+ per 30s chunk) and the
+            # retried output is mostly low-confidence junk anyway
+            temperature=0.0,
+            fp16=False  # No speedup on Maxwell GPUs (GTX 980), unsupported on CPU
         )
         
         # Extract segments with timestamps

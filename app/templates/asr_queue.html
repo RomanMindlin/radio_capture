@@ -128,15 +128,18 @@
     }
 
     function renderSummary(t) {
-        const eta = t.eta_hours === null ? "&ndash;"
+        // eta_hours is null when ASR isn't outpacing newly arriving speech
+        const eta = t.eta_hours === null ? "not draining"
             : (t.eta_hours < 0.1 ? "clear" : t.eta_hours + "h");
+        const etaCls = t.eta_hours === null ? "text-danger" : "";
+        const etaSub = `~${t.expected_asr} ASR jobs, +${t.asr_arrivals_per_hour}/h new`;
         const pendCls = t.pending_total > 0 ? "text-danger" : "text-success";
         document.getElementById("summary-cards").innerHTML =
             card("Queue total", t.pending_total, "awaiting processing", pendCls) +
             card("Pending ASR", t.pending_asr, "speech, no transcript") +
             card("Pending class.", t.pending_classification, "not classified yet") +
             card("Throughput", t.throughput_per_hour + "/h", "transcribed / hour") +
-            card("ETA to drain", eta, "at current rate") +
+            card("ETA to drain", eta, etaSub, etaCls) +
             card("Done 24h", t.done_last_24h, "transcribed");
     }
 
