@@ -92,7 +92,7 @@
 
     function playAudio(fileId) {
         const audioPlayer = document.getElementById('audioPlayer');
-        const streamUrl = `/api/stats/files/${fileId}/stream`;
+        const streamUrl = `{{ root }}/api/stats/files/${fileId}/stream`;
 
         // If clicking the same file that's playing, toggle pause/play
         if (currentPlayingId === fileId && !audioPlayer.paused) {
@@ -238,7 +238,7 @@
         const dateFrom = document.getElementById('fileDateFrom').value;
         const dateTo = document.getElementById('fileDateTo').value;
 
-        let url = `/api/stats/files?skip=${page * pageSize}&limit=${pageSize}`;
+        let url = `{{ root }}/api/stats/files?skip=${page * pageSize}&limit=${pageSize}`;
         if (streamId) url += `&stream_id=${streamId}`;
         if (dateFrom) url += `&date_from=${dateFrom}`;
         if (dateTo) url += `&date_to=${dateTo}`;
@@ -287,7 +287,7 @@
                 <td>
                     <button id="play-btn-${f.id}" class="btn btn-sm btn-outline-success me-1" onclick="playAudio(${f.id})">▶️ Play</button>
                     <button id="asr-btn-${f.id}" class="btn btn-sm ${asrButtonClass} me-1" ${asrButtonDisabled} title="${asrButtonTitle}">🎤 View</button>
-                    <a href="/api/stats/files/${f.id}/download" class="btn btn-sm btn-outline-primary">Download</a>
+                    <a href="{{ root }}/api/stats/files/${f.id}/download" class="btn btn-sm btn-outline-primary">Download</a>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -314,7 +314,7 @@
         const dateFrom = document.getElementById('fileDateFrom').value;
         const dateTo = document.getElementById('fileDateTo').value;
 
-        let url = `/api/stats/files/export?`;
+        let url = `{{ root }}/api/stats/files/export?`;
         if (streamId) url += `&stream_id=${streamId}`;
         if (dateFrom) url += `&date_from=${dateFrom}`;
         if (dateTo) url += `&date_to=${dateTo}`;

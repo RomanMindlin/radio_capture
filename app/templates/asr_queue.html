@@ -98,8 +98,8 @@
         const days = document.getElementById("window-select").value;
         let data;
         try {
-            const resp = await fetch(`/api/stats/asr-queue?days=${days}`);
-            if (resp.status === 401) { window.location = "/login"; return; }
+            const resp = await fetch(`{{ root }}/api/stats/asr-queue?days=${days}`);
+            if (resp.status === 401) { window.location = "{{ root }}/login"; return; }
             if (!resp.ok) throw new Error("HTTP " + resp.status);
             data = await resp.json();
         } catch (e) {
@@ -151,7 +151,7 @@
         }
         document.getElementById("station-rows").innerHTML = stations.map(s => `
             <tr>
-                <td><a href="/streams/${s.stream_id}">${s.name}</a></td>
+                <td><a href="{{ root }}/streams/${s.stream_id}">${s.name}</a></td>
                 <td class="text-end">${s.pending_classification}</td>
                 <td class="text-end">${s.pending_asr}</td>
                 <td class="text-end fw-bold ${s.pending_total > 0 ? 'text-danger' : 'text-success'}">${s.pending_total}</td>

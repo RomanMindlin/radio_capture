@@ -30,7 +30,7 @@
                 {% for rec in recordings %}
                 <li class="list-group-item d-flex justify-content-between align-items-center">
                     {{ rec.start_ts }} ({{ rec.duration_seconds }}s)
-                    <a href="/api/recordings/{{ rec.id }}/download"
+                    <a href="{{ root }}/api/recordings/{{ rec.id }}/download"
                         class="btn btn-sm btn-outline-secondary">Download</a>
                 </li>
                 {% endfor %}
@@ -41,7 +41,7 @@
 
 <script>
     async function controlStream(action) {
-        const resp = await fetch(`/api/streams/{{ stream.id }}/${action}`, { method: 'POST' });
+        const resp = await fetch(`{{ root }}/api/streams/{{ stream.id }}/${action}`, { method: 'POST' });
         if (resp.ok) {
             location.reload();
         } else {

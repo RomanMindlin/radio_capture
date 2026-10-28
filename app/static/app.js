@@ -1,20 +1,20 @@
 async function login(event) {
     event.preventDefault();
     const formData = new FormData(event.target);
-    const response = await fetch('/api/auth/login', {
+    const response = await fetch(ROOT + '/api/auth/login', {
         method: 'POST',
         body: formData
     });
     if (response.ok) {
-        window.location.href = '/dashboard';
+        window.location.href = ROOT + '/dashboard';
     } else {
         alert('Login failed');
     }
 }
 
 async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    window.location.href = '/login';
+    await fetch(ROOT + '/api/auth/logout', { method: 'POST' });
+    window.location.href = ROOT + '/login';
 }
 
 // Polling for status updates?

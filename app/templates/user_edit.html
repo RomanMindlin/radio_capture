@@ -37,7 +37,7 @@
     </div>
 
     <button type="submit" class="btn btn-primary">Save</button>
-    <a href="/settings" class="btn btn-secondary">Cancel</a>
+    <a href="{{ root }}/settings" class="btn btn-secondary">Cancel</a>
 </form>
 
 <script>
@@ -61,7 +61,7 @@
         return;
     }
 
-    const url = isNew ? '/api/users/' : '/api/users/' + userId;
+    const url = isNew ? '{{ root }}/api/users/' : '{{ root }}/api/users/' + userId;
     const method = isNew ? 'POST' : 'PUT';
 
     const resp = await fetch(url, {
@@ -71,7 +71,7 @@
     });
 
     if (resp.ok) {
-        window.location.href = '/settings';
+        window.location.href = '{{ root }}/settings';
     } else {
         const err = await resp.json();
         alert('Error saving user: ' + (err.detail || 'Unknown error'));

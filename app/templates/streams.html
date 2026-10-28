@@ -5,7 +5,7 @@
     <h1 class="h2">Streams</h1>
     {% if user.role == 'admin' %}
     <div class="btn-toolbar mb-2 mb-md-0">
-        <a href="/streams/new" class="btn btn-sm btn-outline-secondary">Add New Stream</a>
+        <a href="{{ root }}/streams/new" class="btn btn-sm btn-outline-secondary">Add New Stream</a>
     </div>
     {% endif %}
 </div>
@@ -31,9 +31,9 @@
                 <td>{{ stream.current_status }}</td>
                 <td>{{ stream.enabled }}</td>
                 <td>
-                    <a href="/streams/{{ stream.id }}" class="btn btn-sm btn-info">View</a>
+                    <a href="{{ root }}/streams/{{ stream.id }}" class="btn btn-sm btn-info">View</a>
                     {% if user.role == 'admin' %}
-                    <a href="/streams/{{ stream.id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
+                    <a href="{{ root }}/streams/{{ stream.id }}/edit" class="btn btn-sm btn-secondary">Edit</a>
                     {% endif %}
                 </td>
             </tr>

@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, desc, select
 
 from app.api.auth import get_current_user
+from app.api.prefix import redirect, root
 from app.core.db import get_session
 from app.models.models import Recording, Stream, User, UserRole
 
-templates = Jinja2Templates(directory="app/templates")
+# Templates get `root`, the path the app is served at, for their URLs
+templates = Jinja2Templates(directory="app/templates", context_processors=[lambda request: {"root": root(request)}])
 router = APIRouter()
 
 # Helper to inject user into template context
@@ -37,38 +38,38 @@ def login_page(request: Request):
 
 @router.get("/dashboard")
 async def dashboard(request: Request, user: User = Depends(login_required), session: Session = Depends(get_session)):
-    if not user: return RedirectResponse("/login")
+    if not user: return redirect(request, "/login")
     streams = session.exec(select(Stream)).all()
     return templates.TemplateResponse(request, "dashboard.html", {"user": user, "streams": streams})
 
 @router.get("/stats")
 async def stats_page(request: Request, user: User = Depends(login_required), session: Session = Depends(get_session)):
-    if not user: return RedirectResponse("/login")
+    if not user: return redirect(request, "/login")
     streams = session.exec(select(Stream)).all()
     return templates.TemplateResponse(request, "stats.html", {"user": user, "streams": streams})
 
 @router.get("/asr-queue")
 async def asr_queue_page(request: Request, user: User = Depends(login_required)):
-    if not user: return RedirectResponse("/login")
+    if not user: return redirect(request, "/login")
     return templates.TemplateResponse(request, "asr_queue.html", {"user": user})
 
 @router.get("/streams")
 async def streams_page(request: Request, user: User = Depends(login_required), session: Session = Depends(get_session)):
-    if not user: return RedirectResponse("/login")
+    if not user: return redirect(request, "/login")
     streams = session.exec(select(Stream)).all()
     return templates.TemplateResponse(request, "streams.html", {"user": user, "streams": streams})
 
 @router.get("/streams/new")
 async def new_stream_page(request: Request, user: User = Depends(login_required)):
-    if not user: return RedirectResponse("/login")
-    if user.role != UserRole.ADMIN: return RedirectResponse("/dashboard")
+    if not user: return redirect(request, "/login")
+    if user.role != UserRole.ADMIN: return redirect(request, "/dashboard")
     return templates.TemplateResponse(request, "stream_edit.html", {"user": user, "stream": None})
 
 @router.get("/streams/{stream_id}")
 async def stream_detail(request: Request, stream_id: int, user: User = Depends(login_required), session: Session = Depends(get_session)):
-    if not user: return RedirectResponse("/login")
+    if not user: return redirect(request, "/login")
     stream = session.get(Stream, stream_id)
-    if not stream: return RedirectResponse("/streams")
+    if not stream: return redirect(request, "/streams")
 
     recordings = session.exec(
         select(Recording)
@@ -81,20 +82,20 @@ async def stream_detail(request: Request, stream_id: int, user: User = Depends(l
 
 @router.get("/streams/{stream_id}/edit")
 async def edit_stream_page(request: Request, stream_id: int, user: User = Depends(login_required), session: Session = Depends(get_session)):
-    if not user: return RedirectResponse("/login")
-    if user.role != UserRole.ADMIN: return RedirectResponse("/dashboard")
+    if not user: return redirect(request, "/login")
+    if user.role != UserRole.ADMIN: return redirect(request, "/dashboard")
     stream = session.get(Stream, stream_id)
     return templates.TemplateResponse(request, "stream_edit.html", {"user": user, "stream": stream})
 
 @router.get("/recordings")
 async def recordings_page(request: Request, user: User = Depends(login_required), session: Session = Depends(get_session)):
-    if not user: return RedirectResponse("/login")
+    if not user: return redirect(request, "/login")
     streams = session.exec(select(Stream)).all()
     return templates.TemplateResponse(request, "recordings.html", {"user": user, "streams": streams})
 
 @router.get("/settings")
 async def settings_page(request: Request, user: User = Depends(login_required), session: Session = Depends(get_session)):
-    if not user: return RedirectResponse("/login")
+    if not user: return redirect(request, "/login")
     users_list = []
     if user.role == UserRole.ADMIN:
         users_list = session.exec(select(User)).all()
@@ -102,13 +103,13 @@ async def settings_page(request: Request, user: User = Depends(login_required), 
 
 @router.get("/settings/users/new")
 async def new_user_page(request: Request, user: User = Depends(login_required)):
-    if not user: return RedirectResponse("/login")
-    if user.role != UserRole.ADMIN: return RedirectResponse("/dashboard")
+    if not user: return redirect(request, "/login")
+    if user.role != UserRole.ADMIN: return redirect(request, "/dashboard")
     return templates.TemplateResponse(request, "user_edit.html", {"user": user, "user_obj": None})
 
 @router.get("/settings/users/{user_id}")
 async def edit_user_page(request: Request, user_id: int, user: User = Depends(login_required), session: Session = Depends(get_session)):
-    if not user: return RedirectResponse("/login")
-    if user.role != UserRole.ADMIN: return RedirectResponse("/dashboard")
+    if not user: return redirect(request, "/login")
+    if user.role != UserRole.ADMIN: return redirect(request, "/dashboard")
     user_obj = session.get(User, user_id)
     return templates.TemplateResponse(request, "user_edit.html", {"user": user, "user_obj": user_obj})

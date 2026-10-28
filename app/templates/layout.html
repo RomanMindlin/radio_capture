@@ -6,16 +6,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Radio Capture Service</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="/static/style.css" rel="stylesheet">
+  <link href="{{ root }}/static/style.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="/static/app.js"></script>
+  <script>const ROOT = "{{ root }}";</script>
+  <script src="{{ root }}/static/app.js"></script>
 </head>
 
 <body>
 
   {% if user %}
   <header class="navbar navbar-dark sticky-top bg-dark flex-md-nowrap p-0 shadow">
-    <a class="navbar-brand col-md-3 col-lg-2 me-0 px-3" href="/">Radio Capture</a>
+    <a class="navbar-brand col-md-3 col-lg-2 me-0 px-3" href="{{ root }}/">Radio Capture</a>
     <button class="navbar-toggler position-absolute d-md-none collapsed" type="button" data-bs-toggle="collapse"
       data-bs-target="#sidebarMenu">
       <span class="navbar-toggler-icon"></span>
@@ -33,19 +34,19 @@
         <div class="position-sticky pt-3">
           <ul class="nav flex-column">
             <li class="nav-item">
-              <a class="nav-link" href="/dashboard">Dashboard</a>
+              <a class="nav-link" href="{{ root }}/dashboard">Dashboard</a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="/streams">Streams</a>
+              <a class="nav-link" href="{{ root }}/streams">Streams</a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="/recordings">Recordings</a>
+              <a class="nav-link" href="{{ root }}/recordings">Recordings</a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="/asr-queue">ASR Queue</a>
+              <a class="nav-link" href="{{ root }}/asr-queue">ASR Queue</a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" href="/settings">Settings</a>
+              <a class="nav-link" href="{{ root }}/settings">Settings</a>
             </li>
           </ul>
         </div>

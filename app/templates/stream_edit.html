@@ -91,7 +91,7 @@
         optional_params: JSON.parse(document.getElementById('optional_params').value || '{}')
     };
 
-    const url = isNew ? '/api/streams/' : '/api/streams/' + streamId;
+    const url = isNew ? '{{ root }}/api/streams/' : '{{ root }}/api/streams/' + streamId;
     const method = isNew ? 'POST' : 'PUT';
 
     const resp = await fetch(url, {
@@ -101,7 +101,7 @@
     });
 
     if (resp.ok) {
-        window.location.href = '/streams';
+        window.location.href = '{{ root }}/streams';
     } else {
         alert('Error saving stream');
     }

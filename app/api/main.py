@@ -2,12 +2,12 @@ import asyncio
 import logging
 
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session, select
 
 from app.api import auth, recordings, streams, ui_routes, users
 from app.api.auth import get_password_hash
+from app.api.prefix import ForwardedPrefixMiddleware, redirect
 from app.core.db import create_db_and_tables, engine, get_session
 from app.core.logging_config import configure_app_logging, setup_logging
 from app.models.models import User, UserRole
@@ -18,6 +18,8 @@ logger = setup_logging("radio_capture.api")
 configure_app_logging("radio_capture.api")
 
 app = FastAPI(title="Radio Stream Capture Service")
+# Behind nginx at /radio (see app/api/prefix.py)
+app.add_middleware(ForwardedPrefixMiddleware)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
@@ -51,5 +53,5 @@ async def on_shutdown():
     await manager.stop()
 
 @app.get("/")
-def root():
-    return RedirectResponse(url="/dashboard")
+def root(request: Request):
+    return redirect(request, "/dashboard")
