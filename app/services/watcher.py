@@ -21,12 +21,12 @@ HEALTH_LOG_INTERVAL = timedelta(minutes=15)
 STUCK_LOOKBACK_HOURS = 72
 # Give up re-queueing a recording after this many failed attempts.
 MAX_PROCESS_ATTEMPTS = 3
-# Cap new discoveries per scan cycle. scan_files() runs synchronously on the
-# event loop, so an unbounded backlog (e.g. after ASR was down for a while)
-# would keep the loop busy discovering for hours and starve the very
-# classification/ASR work that drains the backlog. Capping lets each cycle
-# return promptly; the remaining files are picked up on the next cycle, once
-# already-queued recordings have had a chance to process.
+# Cap new discoveries per scan cycle. Each discovery runs ffprobe and a commit,
+# so an unbounded backlog (e.g. after ASR was down for a while) would keep the
+# scan busy for hours and delay the very classification/ASR work that drains
+# the backlog. Capping lets each cycle return promptly; the remaining files are
+# picked up on the next cycle, once already-queued recordings have had a
+# chance to process.
 MAX_DISCOVER_PER_CYCLE = 500
 
 class RecordingWatcher:
@@ -80,7 +80,28 @@ class RecordingWatcher:
         return True
 
     async def scan_files(self):
-        discovered = 0
+        # The walk, DB lookups and ffprobe calls run in a worker thread so they
+        # don't block the event loop; tasks must be spawned back on the loop.
+        discovered, capped = await asyncio.to_thread(self._discover_new_files)
+        for recording_id, full_path, language in discovered:
+            self._spawn_processing(recording_id, full_path, language)
+
+        if discovered:
+            logger.info(
+                "Scan cycle finished: %d new recording(s) queued, %d task(s) in flight%s",
+                len(discovered),
+                len(self._tasks),
+                " — discovery cap hit, remaining files next cycle" if capped else "",
+            )
+
+    def _discover_new_files(self) -> tuple[list[tuple[int, str, str]], bool]:
+        """
+        Walk the recordings directories and create a Recording row for every
+        audio file not yet in the database.
+
+        Returns ([(recording_id, path, language), ...], capped).
+        """
+        discovered: list[tuple[int, str, str]] = []
         capped = False
         with Session(engine) as session:
             streams = session.exec(select(Stream)).all()
@@ -91,20 +112,21 @@ class RecordingWatcher:
                     "Nothing will be recorded, classified or summarised.",
                     len(streams),
                 )
-                return
+                return discovered, capped
 
-            for stream in streams:
+            # One query per cycle instead of one per file on disk: a per-file
+            # ORM lookup cost ~0.7ms, i.e. ~45s of CPU per cycle at 60k files,
+            # which also starved the ASR thread of the GIL.
+            known_paths = set(
+                session.exec(
+                    select(Recording.path).where(Recording.status != "deleted")
+                ).all()
+            )
+
+            for stream in enabled_streams:
                 if capped: break
-                if not stream.enabled: continue
 
-                # Check stream dir
                 # Pattern: /data/recordings/{stream.name}/{YYYY}/{MM}/{DD}/
-                # We need to walk recursively? Or just check recent folders?
-                # For efficiency, we only check Today and Yesterday?
-                # Or we just walk the whole tree (might be slow if millions of files).
-                # Better: Since we name files by timestamp, we can just check if file is in DB.
-                # Project requirement: "Creates a recordings entry whenever a segment is created".
-                
                 base_dir = f"/data/recordings/{stream.name}"
                 if not os.path.exists(base_dir):
                     logger.warning(
@@ -119,17 +141,7 @@ class RecordingWatcher:
                         if not file.endswith((".wav", ".mp3")): continue
                         
                         full_path = os.path.join(root, file)
-                        
-                        # Optimization: check if we already have this path
-                        # Ideally we use a cache or bloom filter, but SQL is okay for <100k files.
-                        # We can query by path.
-                        existing = session.exec(
-                            select(Recording).where(
-                                Recording.path == full_path,
-                                Recording.status != "deleted"
-                            )
-                        ).first()
-                        if existing:
+                        if full_path in known_paths:
                             continue
                             
                         # It's new. Stats?
@@ -160,32 +172,26 @@ class RecordingWatcher:
                             session.add(rec)
                             session.commit()
                             session.refresh(rec)
-                            discovered += 1
+                            known_paths.add(full_path)
                             logger.info(
                                 f"Discovered new recording: {file} (ID: {rec.id}, "
                                 f"stream={stream.name}, size={size}B, duration={duration:.1f}s)"
                             )
 
-                            # Schedule classification and ASR in background thread
+                            # Classification and ASR are scheduled by the caller
                             stream_language = stream.language if hasattr(stream, 'language') and stream.language else "he"
-                            self._spawn_processing(rec.id, full_path, stream_language)
+                            discovered.append((rec.id, full_path, stream_language))
                         except Exception as e:
                             logger.error(f"Error processing file {file}: {e}", exc_info=True)
 
-                        if discovered >= MAX_DISCOVER_PER_CYCLE:
+                        if len(discovered) >= MAX_DISCOVER_PER_CYCLE:
                             capped = True
                             break
 
                     if capped:
                         break
 
-        if discovered:
-            logger.info(
-                "Scan cycle finished: %d new recording(s) queued, %d task(s) in flight%s",
-                discovered,
-                len(self._tasks),
-                " — discovery cap hit, remaining files next cycle" if capped else "",
-            )
+        return discovered, capped
 
     async def _process_recording_async(self, recording_id: int, file_path: str, language: str):
         """
