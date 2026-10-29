@@ -5,7 +5,7 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlmodel import Session, select
 
 from app.core.db import engine
@@ -28,11 +28,20 @@ MAX_PROCESS_ATTEMPTS = 3
 # picked up on the next cycle, once already-queued recordings have had a
 # chance to process.
 MAX_DISCOVER_PER_CYCLE = 500
+# Rows marked deleted are kept this long so the dashboard's 30-day activity
+# chart (get_detailed_stats) still sees them, then removed for good. Without
+# this the table only ever grows: deleted rows still carry their transcripts.
+DELETED_ROW_RETENTION_DAYS = 31
+PURGE_INTERVAL = timedelta(days=1)
+# Delete in batches so each write transaction (and the lock it holds on the
+# database shared with the API) stays short.
+PURGE_BATCH_SIZE = 10000
 
 class RecordingWatcher:
     def __init__(self):
         self.running = False
         self._last_cleanup: datetime | None = None
+        self._last_purge: datetime | None = None
         self._last_health_log: datetime | None = None
         # Strong references to in-flight processing tasks. Without this the event
         # loop only keeps a weak reference and tasks can be garbage collected
@@ -60,6 +69,7 @@ class RecordingWatcher:
                 await self.scan_files()
                 await self.requeue_stuck_recordings()
                 await self.maybe_cleanup_old_recordings()
+                await self.maybe_purge_deleted_rows()
                 self.maybe_log_pipeline_health()
             except Exception as e:
                 logger.error(f"Error in watcher loop: {e}", exc_info=True)
@@ -516,6 +526,49 @@ class RecordingWatcher:
                     except Exception as e:
                         session.rollback()
                         logger.error(f"Failed to delete recording {recording.id}: {e}")
+
+    async def maybe_purge_deleted_rows(self):
+        """Once a day, permanently remove long-deleted recording rows."""
+        now = datetime.utcnow()
+        if self._last_purge and (now - self._last_purge) < PURGE_INTERVAL:
+            return
+
+        await asyncio.to_thread(self.purge_deleted_rows)
+        self._last_purge = now
+
+    def purge_deleted_rows(self):
+        """
+        Hard-delete rows marked deleted whose recording started more than
+        DELETED_ROW_RETENTION_DAYS ago (their audio files are long gone).
+        """
+        cutoff = datetime.utcnow() - timedelta(days=DELETED_ROW_RETENTION_DAYS)
+        statement = text("""
+            DELETE FROM recording WHERE id IN (
+                SELECT id FROM recording
+                WHERE start_ts < :cutoff AND status = 'deleted'
+                LIMIT :batch
+            )
+        """)
+
+        purged = 0
+        try:
+            while True:
+                with engine.begin() as conn:
+                    deleted = conn.execute(
+                        statement, {"cutoff": cutoff, "batch": PURGE_BATCH_SIZE}
+                    ).rowcount
+                purged += deleted
+                if deleted < PURGE_BATCH_SIZE:
+                    break
+        except Exception as e:
+            logger.error(f"Failed to purge deleted recording rows: {e}", exc_info=True)
+
+        if purged:
+            logger.info(
+                "Purged %d recording row(s) marked deleted and older than %d days",
+                purged,
+                DELETED_ROW_RETENTION_DAYS,
+            )
 
     def _resolve_retention_days(self, stream: Stream) -> int:
         params = stream.optional_params or {}
