@@ -52,3 +52,16 @@ def test_transcode_only_applies_explicit_channels_and_sample_rate():
     assert cmd[cmd.index("-c:a") + 1] == "libmp3lame"
     assert cmd[cmd.index("-ac") + 1] == "2"
     assert cmd[cmd.index("-ar") + 1] == "48000"
+
+
+def test_hls_input_skips_reconnect_flags():
+    cmd = _build({"url": "https://example.com/live/playlist.m3u8?bitrate=192000"})
+    assert "-reconnect" not in cmd
+    assert "-reconnect_at_eof" not in cmd
+    assert cmd[cmd.index("-timeout") + 1] == "30000000"
+
+
+def test_progressive_http_input_keeps_reconnect_flags():
+    cmd = _build({"url": "https://example.com/Live/icecast.audio"})
+    assert cmd[cmd.index("-reconnect_at_eof") + 1] == "1"
+    assert cmd[cmd.index("-timeout") + 1] == "30000000"

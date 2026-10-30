@@ -26,7 +26,11 @@ class FfmpegBuilder:
         self.name = stream_config.get("name")
         self.mandatory = stream_config.get("mandatory_params", {})
         self.optional = stream_config.get("optional_params", {})
-        
+
+    def _is_hls(self) -> bool:
+        path = self.url.split("?", 1)[0].lower()
+        return path.endswith(".m3u8")
+
     def build_command(self) -> List[str]:
         # Basic validation
         if not self.url or not self.name:
@@ -41,14 +45,18 @@ class FfmpegBuilder:
         url_scheme = (self.url or "").split("://")[0].lower()
         if url_scheme in ("http", "https"):
             # Reconnect so ffmpeg retries after brief source outages rather than
-            # hanging or exiting.
-            cmd.extend([
-                "-reconnect", "1",
-                "-reconnect_at_eof", "1",
-                "-reconnect_streamed", "1",
-                "-reconnect_delay_max", "30",
-                "-timeout", "30000000",   # 30 s in µs — prevents silent TCP hang
-            ])
+            # hanging or exiting. Not for HLS: the demuxer refreshes the live
+            # playlist itself, and -reconnect_at_eof makes it re-request the
+            # playlist with a Range header — CDNs that ignore Range return the
+            # full playlist again, so it never finishes loading.
+            if not self._is_hls():
+                cmd.extend([
+                    "-reconnect", "1",
+                    "-reconnect_at_eof", "1",
+                    "-reconnect_streamed", "1",
+                    "-reconnect_delay_max", "30",
+                ])
+            cmd.extend(["-timeout", "30000000"])   # 30 s in µs — prevents silent TCP hang
 
             # Custom User-Agent — many providers block the default "Lavf/X.Y.Z"
             # fingerprint. Set optional_params.user_agent to a browser string to
