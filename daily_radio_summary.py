@@ -46,6 +46,8 @@ EXIT_NOTHING_TO_SEND = 2
 TELEGRAM_MAX_MESSAGE_CHARS = 4096
 TELEGRAM_MAX_RETRIES = 4
 OPENAI_MAX_RETRIES = 3
+# Flex processing is slower than the default tier; OpenAI recommends allowing up to 15 minutes.
+OPENAI_TIMEOUT_SECONDS = 900
 
 SUMMARY_INTRO_BY_LANGUAGE = {
     "en": "What people talked about on the radio yesterday.",
@@ -382,9 +384,11 @@ def call_openai(prompt: str, stream_name: str) -> str:
         "Content-Type": "application/json"
     }
 
-    model = os.getenv("OPENAI_SUMMARY_MODEL", "gpt-5-mini")
+    model = os.getenv("OPENAI_SUMMARY_MODEL", "gpt-6-luna")
+    service_tier = os.getenv("OPENAI_SUMMARY_SERVICE_TIER", "flex")
     payload = {
         "model": model,
+        "service_tier": service_tier,
         "messages": [
             {
                 "role": "user",
@@ -394,9 +398,10 @@ def call_openai(prompt: str, stream_name: str) -> str:
     }
 
     logger.info(
-        "Calling OpenAI for %s (model=%s, prompt=%d chars)",
+        "Calling OpenAI for %s (model=%s, service_tier=%s, prompt=%d chars)",
         stream_name,
         model,
+        service_tier,
         len(prompt),
     )
 
@@ -405,7 +410,9 @@ def call_openai(prompt: str, stream_name: str) -> str:
     for attempt in range(1, OPENAI_MAX_RETRIES + 1):
         started = time.monotonic()
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=120)
+            response = requests.post(
+                url, headers=headers, json=payload, timeout=OPENAI_TIMEOUT_SECONDS
+            )
             elapsed = time.monotonic() - started
 
             if response.status_code == 429 or response.status_code >= 500:
@@ -450,11 +457,13 @@ def call_openai(prompt: str, stream_name: str) -> str:
         usage = result.get("usage", {})
         finish_reason = choice.get("finish_reason")
         logger.info(
-            "OpenAI OK for %s in %.1fs: %d chars, finish_reason=%s, tokens(prompt/completion/total)=%s/%s/%s",
+            "OpenAI OK for %s in %.1fs: %d chars, finish_reason=%s, service_tier=%s, "
+            "tokens(prompt/completion/total)=%s/%s/%s",
             stream_name,
             elapsed,
             len(summary_text or ""),
             finish_reason,
+            result.get("service_tier"),
             usage.get("prompt_tokens"),
             usage.get("completion_tokens"),
             usage.get("total_tokens"),
